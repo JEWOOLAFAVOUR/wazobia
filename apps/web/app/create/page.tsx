@@ -2,350 +2,261 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { CHARACTERS } from "@/game/character/characters";
-import { EYE_COLORS, HAIR_COLORS, SKIN_TONES } from "@/game/character/appearance";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { saveAvatar } from "@/game/entry/avatarStore";
+import { SKIN_TONES } from "@/game/character/appearance";
 import {
-  BOTTOM_COLORS,
-  BOTTOM_LABELS,
-  CLOTH_COLORS,
   DEFAULT_AVATAR,
-  SHOE_COLORS,
-  SHOE_LABELS,
-  SITUATIONS,
-  TOP_COLORS,
-  TOP_LABELS,
+  FABRICS,
+  HAIR_CUTS,
+  OUTFITS,
   type Avatar,
-  type BottomId,
-  type ShoeId,
-  type TopId,
+  type OutfitId,
 } from "@/game/character/wardrobe";
 
 const CharacterViewer = dynamic(() => import("@/game/character/CharacterViewer"), {
   ssr: false,
-  loading: () => <div className="text-sm text-stone-500">Preparing your character…</div>,
+  loading: () => <div className="text-sm text-slate-400">Preparing your character…</div>,
 });
 
-const STEPS = ["Body", "Top", "Bottoms", "Shoes", "Extras", "You", "Review"] as const;
-type Step = (typeof STEPS)[number];
+function applyOutfit(outfit: OutfitId, body: Avatar["body"], topColor: string): Pick<Avatar, "top" | "bottom" | "shoes"> {
+  switch (outfit) {
+    case "office":
+      return {
+        top: { id: "shirt", color: topColor },
+        bottom: { id: "trousers", color: "#2b2b30" },
+        shoes: { id: "leather", color: "#5a3a24" },
+      };
+    case "owambe":
+      return {
+        top: { id: "native", color: topColor },
+        bottom: body === "female" ? { id: "skirt", color: "#1d1d22" } : { id: "trousers", color: "#201d1a" },
+        shoes: { id: "leather", color: "#241a12" },
+      };
+    case "sitework":
+      return {
+        top: { id: "longsleeve", color: "#7a7448" },
+        bottom: { id: "trousers", color: "#3d3a45" },
+        shoes: { id: "sneakers", color: "#eceae6" },
+      };
+    case "casual":
+    default:
+      return {
+        top: { id: "tee", color: topColor },
+        bottom: { id: "jeans", color: "#2f4a6b" },
+        shoes: { id: "sneakers", color: "#eceae6" },
+      };
+  }
+}
 
-function Dots({
-  options,
-  value,
-  onPick,
-  label,
-}: {
-  options: { id: string; label: string; swatch: string }[];
-  value: string;
-  onPick: (id: string) => void;
-  label: string;
-}) {
+function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <span className="text-xs uppercase tracking-widest text-stone-500">{label}</span>
-      <div className="flex gap-2.5" role="radiogroup" aria-label={label}>
-        {options.map((o) => (
-          <button
-            key={o.id}
-            role="radio"
-            aria-checked={o.id === value}
-            title={o.label}
-            aria-label={o.label}
-            onClick={() => onPick(o.id)}
-            className={`w-8 h-8 rounded-full transition-transform duration-150 ${
-              o.id === value ? "ring-2 ring-stone-100 ring-offset-2 ring-offset-[#121110] scale-110" : "hover:scale-105"
-            }`}
-            style={{ backgroundColor: o.swatch }}
-          />
-        ))}
-      </div>
-    </div>
+    <button
+      onClick={onClick}
+      className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
+        selected ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
-function Pills<T extends string>({
-  options,
-  value,
-  onPick,
-  label,
-}: {
-  options: { id: T; label: string }[];
-  value: T;
-  onPick: (id: T) => void;
-  label: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <span className="text-xs uppercase tracking-widest text-stone-500">{label}</span>
-      <div className="flex gap-2 flex-wrap justify-center" role="radiogroup" aria-label={label}>
-        {options.map((o) => (
-          <button
-            key={o.id}
-            role="radio"
-            aria-checked={o.id === value}
-            onClick={() => onPick(o.id)}
-            className={`rounded-full px-5 py-2 text-sm transition-all duration-200 border ${
-              o.id === value
-                ? "bg-stone-100 text-stone-900 border-stone-100 font-semibold"
-                : "border-stone-700 text-stone-300 hover:border-stone-500"
-            }`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+function Label({ children }: { children: React.ReactNode }) {
+  return <div className="text-[11px] font-medium text-slate-500 mt-3 mb-1 first:mt-0">{children}</div>;
 }
 
 export default function CreateCharacter() {
   const [avatar, setAvatar] = useState<Avatar>(DEFAULT_AVATAR);
-  const [step, setStep] = useState<Step>("Body");
-  const [fading, setFading] = useState(false);
-  const [entered, setEntered] = useState(false);
+  const router = useRouter();
 
   const patch = (p: Partial<Avatar>) => setAvatar((a) => ({ ...a, ...p }));
-  const stepIndex = STEPS.indexOf(step);
+  const fabricTop = FABRICS.find((f) => f.id === avatar.fabric)?.top ?? avatar.top?.color ?? "#2e6b46";
 
-  const switchBody = (id: Avatar["body"]) => {
-    if (id === avatar.body || fading) return;
-    setFading(true);
-    window.setTimeout(() => {
-      setAvatar((a) => ({
-        ...a,
-        body: id,
-        bottom: a.bottom?.id === "skirt" && id === "male" ? { id: "trousers", color: "#201d1a" } : a.bottom,
-      }));
-      setFading(false);
-    }, 180);
+  const pickOutfit = (outfit: OutfitId) => {
+    patch({ outfit, ...applyOutfit(outfit, avatar.body, fabricTop) });
   };
 
-  const current = CHARACTERS.find((c) => c.id === avatar.body) ?? CHARACTERS[0];
-  const topLabel = avatar.top ? TOP_LABELS[avatar.top.id] : "—";
-  const bottomLabel = avatar.bottom ? BOTTOM_LABELS[avatar.bottom.id] : "—";
-  const shoeLabel = avatar.shoes ? SHOE_LABELS[avatar.shoes.id] : "—";
-  const skinLabel = SKIN_TONES.find((t) => t.id === avatar.skin)?.label ?? "";
-  const hairLabel = HAIR_COLORS.find((h) => h.id === avatar.hair)?.label ?? "";
-  const headLabel = avatar.headwear.id === "none" ? "—" : avatar.headwear.id === "cap" ? "Cap" : "Head wrap";
-  const accLabel =
-    avatar.accessory === "none" ? "—" : avatar.accessory === "glasses" ? "Glasses" : avatar.accessory === "watch" ? "Watch" : avatar.accessory === "backpack" ? "Backpack" : "Handbag";
+  const pickFabric = (id: string) => {
+    const top = FABRICS.find((f) => f.id === id)?.top ?? fabricTop;
+    patch({ fabric: id, top: avatar.top ? { ...avatar.top, color: top } : avatar.top });
+  };
+
+  const pickBody = (body: Avatar["body"]) => {
+    patch({ body, ...applyOutfit(avatar.outfit, body, fabricTop) });
+  };
+
+  const shuffle = () => {
+    const bodies: Avatar["body"][] = ["female", "male"];
+    const body = bodies[Math.floor(Math.random() * bodies.length)];
+    const hairPool = HAIR_CUTS.filter((h) => h.bodies.includes(body));
+    const hair = hairPool[Math.floor(Math.random() * hairPool.length)];
+    const skins = SKIN_TONES.map((s) => s.id);
+    const outfits: OutfitId[] = ["casual", "office", "owambe", "sitework"];
+    const outfit = outfits[Math.floor(Math.random() * outfits.length)];
+    const fabric = FABRICS[Math.floor(Math.random() * FABRICS.length)].id;
+    const top = FABRICS.find((f) => f.id === fabric)?.top ?? "#2e6b46";
+    patch({ body, skin: skins[Math.floor(Math.random() * skins.length)], hair: { ...avatar.hair, cut: hair.id }, outfit, fabric, ...applyOutfit(outfit, body, top) });
+  };
+
+  const enter = () => {
+    saveAvatar(avatar);
+    router.push("/enter");
+  };
 
   return (
-    <div className="flex flex-col flex-1 items-center bg-[#121110] text-stone-200 font-sans">
-      <header className="w-full max-w-3xl px-6 pt-6 flex items-center justify-between">
-        <span className="text-sm font-semibold tracking-tight text-stone-100">Wazobia</span>
-        <span className="text-xs text-stone-500">
-          {step} · {stepIndex + 1} of {STEPS.length}
-        </span>
+    <div className="h-screen overflow-hidden flex flex-col font-sans text-slate-800 bg-gradient-to-b from-[#dde5ed] via-[#eceff2] to-[#f5f3ee]">
+      {/* top bar */}
+      <header className="flex items-center justify-between px-4 sm:px-6 pt-2 pb-1">
+        <Link
+          href="/"
+          aria-label="Back"
+          className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-xl text-slate-700 hover:bg-slate-50"
+        >
+          ‹
+        </Link>
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="font-bold text-lg tracking-tight">Look</span>
+          <div className="flex gap-1.5" aria-hidden>
+            <span className="h-1.5 w-8 rounded-full bg-emerald-500" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={shuffle}
+            aria-label="Shuffle"
+            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-lg text-slate-700 hover:bg-slate-50"
+          >
+            ⇄
+          </button>
+          <button
+            onClick={enter}
+            className="h-10 px-5 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors"
+          >
+            Next
+          </button>
+        </div>
       </header>
 
-      <main className="w-full max-w-3xl px-6 pb-12 flex flex-col items-center gap-5">
-        <div className="text-center mt-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-stone-50">Create Your Character</h1>
-          <p className="mt-1 text-sm text-stone-400">Drag to look around. Every change shows immediately.</p>
-        </div>
-
-        <div
-          className="w-full h-[50vh] min-h-[340px] rounded-2xl transition-opacity duration-200 flex items-center justify-center"
-          style={{
-            opacity: fading ? 0 : 1,
-            background: "radial-gradient(ellipse 60% 55% at 50% 42%, #292420 0%, #121110 72%)",
-          }}
-        >
-          <div className="w-full h-full [&>div]:h-full">
+      {/* main */}
+      <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-stretch gap-3 px-4 sm:px-6 pb-3 pt-1 max-w-[1500px] w-full mx-auto">
+        {/* stage */}
+        <div className="flex-1 flex flex-col items-center justify-start min-h-0 pt-4 lg:pt-8">
+          <div className="w-full max-w-[34rem] h-[42vh] lg:h-[68vh] max-h-[68vh] [&>div]:h-full">
             <CharacterViewer avatar={avatar} />
           </div>
+          <span className="text-[11px] text-slate-400 -mt-1">drag to spin</span>
         </div>
 
-        <div className="flex gap-1.5" aria-hidden>
-          {STEPS.map((s, i) => (
-            <span key={s} className={`h-1 w-6 rounded-full ${i <= stepIndex ? "bg-amber-400" : "bg-stone-700"}`} />
-          ))}
-        </div>
-
-        {step === "Body" && (
-          <div className="flex flex-col items-center gap-4">
-            <Pills
-              label="Body"
-              value={avatar.body}
-              onPick={(id) => switchBody(id)}
-              options={CHARACTERS.map((c) => ({ id: c.id, label: c.label }))}
-            />
-            <Dots label="Skin" value={avatar.skin} onPick={(id) => patch({ skin: id })} options={SKIN_TONES} />
-            <div className="flex gap-6 flex-wrap justify-center">
-              <Dots label="Hair" value={avatar.hair} onPick={(id) => patch({ hair: id })} options={HAIR_COLORS} />
-              <Dots
-                label="Eyes"
-                value={avatar.eyes}
-                onPick={(id) => patch({ eyes: id })}
-                options={EYE_COLORS}
-              />
-            </div>
-            <p className="text-xs text-stone-600">
-              {current.sub} · pack-in cut — more cuts need the Source tier
-            </p>
-          </div>
-        )}
-
-        {step === "Top" && (
-          <div className="flex flex-col items-center gap-4">
-            <Pills
-              label="Top"
-              value={avatar.top?.id ?? "tee"}
-              onPick={(id: TopId) => patch({ top: { id, color: avatar.top?.color ?? TOP_COLORS[0] } })}
-              options={(Object.keys(TOP_LABELS) as TopId[]).map((id) => ({ id, label: TOP_LABELS[id] }))}
-            />
-            <Dots
-              label="Color"
-              value={avatar.top?.color ?? TOP_COLORS[0]}
-              onPick={(color) => avatar.top && patch({ top: { ...avatar.top, color } })}
-              options={TOP_COLORS.map((c) => ({ id: c, label: c, swatch: c }))}
-            />
-          </div>
-        )}
-
-        {step === "Bottoms" && (
-          <div className="flex flex-col items-center gap-4">
-            <Pills
-              label="Bottoms"
-              value={avatar.bottom?.id ?? "trousers"}
-              onPick={(id: BottomId) => {
-                if (id === "skirt" && avatar.body === "male") return;
-                patch({ bottom: { id, color: avatar.bottom?.color ?? BOTTOM_COLORS[0] } });
-              }}
-              options={(Object.keys(BOTTOM_LABELS) as BottomId[])
-                .filter((id) => id !== "skirt" || avatar.body === "female")
-                .map((id) => ({ id, label: BOTTOM_LABELS[id] }))}
-            />
-            <Dots
-              label="Color"
-              value={avatar.bottom?.color ?? BOTTOM_COLORS[0]}
-              onPick={(color) => avatar.bottom && patch({ bottom: { ...avatar.bottom, color } })}
-              options={BOTTOM_COLORS.map((c) => ({ id: c, label: c, swatch: c }))}
-            />
-          </div>
-        )}
-
-        {step === "Shoes" && (
-          <div className="flex flex-col items-center gap-4">
-            <Pills
-              label="Shoes"
-              value={avatar.shoes?.id ?? "sneakers"}
-              onPick={(id: ShoeId) => patch({ shoes: { id, color: avatar.shoes?.color ?? SHOE_COLORS[0] } })}
-              options={(Object.keys(SHOE_LABELS) as ShoeId[]).map((id) => ({ id, label: SHOE_LABELS[id] }))}
-            />
-            <Dots
-              label="Color"
-              value={avatar.shoes?.color ?? SHOE_COLORS[0]}
-              onPick={(color) => avatar.shoes && patch({ shoes: { ...avatar.shoes, color } })}
-              options={SHOE_COLORS.map((c) => ({ id: c, label: c, swatch: c }))}
-            />
-          </div>
-        )}
-
-        {step === "Extras" && (
-          <div className="flex flex-col items-center gap-4">
-            <Pills
-              label="Headwear"
-              value={avatar.headwear.id}
-              onPick={(id) => patch({ headwear: { id, color: avatar.headwear.color } })}
-              options={[
-                { id: "none" as const, label: "None" },
-                { id: "cap" as const, label: "Cap" },
-                { id: "wrap" as const, label: "Head wrap" },
-              ]}
-            />
-            {avatar.headwear.id !== "none" && (
-              <Dots
-                label="Headwear color"
-                value={avatar.headwear.color}
-                onPick={(color) => patch({ headwear: { ...avatar.headwear, color } })}
-                options={CLOTH_COLORS.map((c) => ({ id: c, label: c, swatch: c }))}
-              />
-            )}
-            <Pills
-              label="Accessory"
-              value={avatar.accessory}
-              onPick={(accessory) => patch({ accessory })}
-              options={[
-                { id: "none" as const, label: "None" },
-                { id: "glasses" as const, label: "Glasses" },
-                { id: "watch" as const, label: "Watch" },
-                { id: "backpack" as const, label: "Backpack" },
-                { id: "handbag" as const, label: "Handbag" },
-              ]}
-            />
-          </div>
-        )}
-
-        {step === "You" && (
-          <div className="flex flex-col items-center gap-4 w-full max-w-sm">
-            <label className="flex flex-col items-center gap-1.5 w-full">
-              <span className="text-xs uppercase tracking-widest text-stone-500">What&apos;s your name?</span>
+        {/* panel */}
+        <aside className="w-full lg:w-[560px] shrink-0 bg-white rounded-[28px] shadow-[0_8px_30px_rgba(15,23,42,0.08)] p-4 flex flex-col max-h-[calc(100vh-104px)] overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <div className="flex items-center gap-2 bg-slate-100 rounded-full pl-4 pr-2 py-2">
+              <span className="font-bold text-slate-800 text-sm">@{avatar.name.trim() ? avatar.name.trim().toLowerCase().replace(/\s+/g, "_") : "you"}</span>
               <input
                 value={avatar.name}
                 onChange={(e) => patch({ name: e.target.value.slice(0, 24) })}
-                placeholder="Favour"
-                className="w-full rounded-xl bg-stone-900 border border-stone-700 px-4 py-2.5 text-center outline-none focus:border-amber-400 text-stone-100"
+                placeholder="your Sim's name"
+                className="flex-1 min-w-0 bg-transparent text-right text-sm text-slate-500 placeholder:text-slate-400 outline-none"
               />
-            </label>
-            <Pills
-              label="What's your situation?"
-              value={avatar.situation}
-              onPick={(situation) => patch({ situation })}
-              options={[{ id: "", label: "Skip" }, ...SITUATIONS.map((s) => ({ id: s, label: s }))]}
-            />
-          </div>
-        )}
-
-        {step === "Review" && (
-          <div className="flex flex-col items-center gap-3 text-sm">
-            <div className="text-center">
-              <div className="text-xs uppercase tracking-widest text-stone-500">Your character</div>
-              <div className="text-xl font-semibold text-stone-50 mt-1">{avatar.name || "Unnamed"}</div>
-              {avatar.situation && <div className="text-stone-400">{avatar.situation}</div>}
             </div>
-            <div className="text-stone-400 text-center leading-relaxed">
-              {skinLabel} skin · {hairLabel} hair
-              <br />
-              {topLabel} · {bottomLabel} · {shoeLabel}
-              <br />
-              {headLabel !== "—" || accLabel !== "—"
-                ? `${[headLabel, accLabel].filter((x) => x !== "—").join(" · ")}`
-                : "No extras"}
+
+            <Label>Body</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["female", "male"] as const).map((b) => (
+                <button
+                  key={b}
+                  onClick={() => pickBody(b)}
+                  className={`rounded-full py-2 text-sm transition-colors ${
+                    avatar.body === b ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {b === "female" ? "Woman" : "Man"}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[11px] text-slate-400">Skin</span>
+              {SKIN_TONES.map((t) => (
+                <button
+                  key={t.id}
+                  title={t.label}
+                  aria-label={t.label}
+                  onClick={() => patch({ skin: t.id })}
+                  className={`w-7 h-7 rounded-full ${avatar.skin === t.id ? "ring-2 ring-slate-900 ring-offset-2" : ""}`}
+                  style={{ backgroundColor: t.swatch }}
+                />
+              ))}
+            </div>
+
+            <Label>Hairstyle</Label>
+            <div className="flex flex-wrap gap-2">
+              {HAIR_CUTS.filter((h) => h.bodies.includes(avatar.body)).map((h) => (
+                <Chip key={h.id} selected={avatar.hair.cut === h.id} onClick={() => patch({ hair: { ...avatar.hair, cut: h.id } })}>
+                  {h.label}
+                </Chip>
+              ))}
+            </div>
+
+            <Label>Outfit</Label>
+            <div className="flex flex-wrap gap-2">
+              {OUTFITS.map((o) => (
+                <Chip key={o.id} selected={avatar.outfit === o.id} onClick={() => pickOutfit(o.id)}>
+                  {o.label}
+                </Chip>
+              ))}
+            </div>
+
+            <Label>Fabric</Label>
+            <div className="flex flex-wrap gap-2">
+              {FABRICS.map((f) => (
+                <button
+                  key={f.id}
+                  title={f.label}
+                  aria-label={f.label}
+                  onClick={() => pickFabric(f.id)}
+                  className={`h-8 px-3 rounded-full text-sm flex items-center gap-2 ${
+                    avatar.fabric === f.id ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  <span className="w-4 h-4 rounded-full inline-block" style={{ backgroundColor: f.swatch }} />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <Label>Extras</Label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "none" as const, label: "None" },
+                { id: "cap" as const, label: "Cap" },
+                { id: "wrap" as const, label: "Head wrap" },
+                { id: "glasses" as const, label: "Glasses" },
+                { id: "backpack" as const, label: "Backpack" },
+              ].map((o) => (
+                <Chip
+                  key={o.id}
+                  selected={o.id === "none" ? avatar.headwear.id === "none" && avatar.accessory === "none" : avatar.headwear.id === o.id || avatar.accessory === o.id}
+                  onClick={() => {
+                    if (o.id === "none") patch({ headwear: { ...avatar.headwear, id: "none" }, accessory: "none" });
+                    else if (o.id === "cap" || o.id === "wrap") patch({ headwear: { ...avatar.headwear, id: o.id } });
+                    else patch({ accessory: o.id });
+                  }}
+                >
+                  {o.label}
+                </Chip>
+              ))}
             </div>
           </div>
-        )}
 
-        <div className="flex items-center gap-3 mt-1">
-          {stepIndex > 0 && (
-            <button
-              onClick={() => setStep(STEPS[stepIndex - 1])}
-              className="rounded-full border border-stone-700 px-8 py-2.5 text-sm text-stone-300 hover:border-stone-500 transition-colors"
-            >
-              Back
-            </button>
-          )}
-          {step !== "Review" ? (
-            <button
-              onClick={() => setStep(STEPS[stepIndex + 1])}
-              className="rounded-full bg-amber-400 text-black font-semibold px-10 py-2.5 text-sm hover:bg-amber-300 transition-colors"
-            >
-              Continue
-            </button>
-          ) : (
-            <button
-              onClick={() => setEntered(true)}
-              className="rounded-full bg-amber-400 text-black font-semibold px-10 py-2.5 text-sm hover:bg-amber-300 transition-colors"
-            >
-              Enter Lagos
-            </button>
-          )}
-        </div>
-        {entered && (
-          <p className="text-sm text-stone-400 text-center">
-            Welcome{avatar.name ? `, ${avatar.name}` : ""} — the city itself arrives in the next phase.
-          </p>
-        )}
+          <button
+            onClick={enter}
+            className="mt-3 w-full py-3 rounded-full bg-emerald-500 text-white font-semibold text-base hover:bg-emerald-600 transition-colors"
+          >
+            Continue
+          </button>
+        </aside>
       </main>
     </div>
   );

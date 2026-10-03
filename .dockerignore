@@ -1,0 +1,30 @@
+# Keep build contexts small and OS-clean: never ship host build output or
+# dependencies into the image (Dockerfile installs/builds its own).
+**/node_modules
+**/.next
+**/out
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+
+# Go build output
+apps/server/bin/
+apps/server/vendor/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# VCS / editor / OS
+.git
+.gitignore
+.github
+**/.DS_Store
+**/.idea
+**/.vscode
+**/*.swp
+**/*.log
+docs/
+*.md
+!README.md

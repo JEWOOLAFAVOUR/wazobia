@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { CharacterId } from "./characters";
+import type { CharacterId } from "./wardrobe";
 
 // The free-pack albedo is a mid-brown "Dark" variant, so tones are implemented
 // as tint multipliers: target tone ÷ sampled base albedo, applied to the skin
