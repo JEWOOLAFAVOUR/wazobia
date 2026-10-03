@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveAvatar } from "@/game/entry/avatarStore";
 import { SKIN_TONES } from "@/game/character/appearance";
@@ -69,6 +68,10 @@ function Label({ children }: { children: React.ReactNode }) {
 
 export default function CreateCharacter() {
   const [avatar, setAvatar] = useState<Avatar>(DEFAULT_AVATAR);
+  const [step, setStep] = useState<"account" | "avatar">("account");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const router = useRouter();
 
   const patch = (p: Partial<Avatar>) => setAvatar((a) => ({ ...a, ...p }));
@@ -105,53 +108,140 @@ export default function CreateCharacter() {
     router.push("/enter");
   };
 
+  const continueToAvatar = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAvatar((current) => ({ ...current, name: username.trim() }));
+    setStep("avatar");
+  };
+
   return (
     <div className="h-screen overflow-hidden flex flex-col font-sans text-slate-800 bg-gradient-to-b from-[#dde5ed] via-[#eceff2] to-[#f5f3ee]">
       {/* top bar */}
       <header className="flex items-center justify-between px-4 sm:px-6 pt-2 pb-1">
-        <Link
-          href="/"
-          aria-label="Back"
-          className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-xl text-slate-700 hover:bg-slate-50"
-        >
-          ‹
-        </Link>
+        {step === "account" ? <span className="w-10" aria-hidden /> : (
+          <button
+            onClick={() => setStep("account")}
+            aria-label="Back to account details"
+            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-xl text-slate-700 hover:bg-slate-50"
+          >
+            ‹
+          </button>
+        )}
         <div className="flex flex-col items-center gap-1.5">
-          <span className="font-bold text-lg tracking-tight">Look</span>
+          <span className="font-bold text-lg tracking-tight">{step === "account" ? "Join Wazobia" : "Look"}</span>
           <div className="flex gap-1.5" aria-hidden>
             <span className="h-1.5 w-8 rounded-full bg-emerald-500" />
+            <span className={`h-1.5 w-8 rounded-full ${step === "avatar" ? "bg-emerald-500" : "bg-slate-300"}`} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={shuffle}
-            aria-label="Shuffle"
-            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-lg text-slate-700 hover:bg-slate-50"
-          >
-            ⇄
-          </button>
-          <button
-            onClick={enter}
-            className="h-10 px-5 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors"
-          >
-            Next
-          </button>
-        </div>
+        {step === "avatar" ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={shuffle}
+              aria-label="Shuffle"
+              className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-lg text-slate-700 hover:bg-slate-50"
+            >
+              ⇄
+            </button>
+            <button
+              onClick={enter}
+              className="h-10 px-5 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        ) : (
+          <span className="w-10" aria-hidden />
+        )}
       </header>
 
       {/* main */}
-      <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-stretch gap-3 px-4 sm:px-6 pb-3 pt-1 max-w-[1500px] w-full mx-auto">
-        {/* stage */}
-        <div className="flex-1 flex flex-col items-center justify-start min-h-0 pt-4 lg:pt-8">
-          <div className="w-full max-w-[34rem] h-[42vh] lg:h-[68vh] max-h-[68vh] [&>div]:h-full">
-            <CharacterViewer avatar={avatar} />
-          </div>
-          <span className="text-[11px] text-slate-400 -mt-1">drag to spin</span>
-        </div>
+      {step === "account" ? (
+        <main className="flex-1 min-h-0 flex items-center justify-center px-4 pb-6">
+          <form onSubmit={continueToAvatar} className="w-full max-w-md rounded-[28px] bg-white p-6 sm:p-8 shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+            <div className="mb-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Step 1 of 2</p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Create your account</h1>
+              <p className="mt-1 text-sm text-slate-500">Choose your details, then make your character.</p>
+            </div>
 
-        {/* panel */}
-        <aside className="w-full lg:w-[560px] shrink-0 bg-white rounded-[28px] shadow-[0_8px_30px_rgba(15,23,42,0.08)] p-4 flex flex-col max-h-[calc(100vh-104px)] overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                Username
+                <input
+                  name="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={24}
+                  pattern="[A-Za-z0-9_]{3,24}"
+                  title="Use 3–24 letters, numbers, or underscores."
+                  autoComplete="username"
+                  placeholder="e.g. lagosstar"
+                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3.5 font-normal outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                Password
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="At least 8 characters"
+                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3.5 font-normal outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                Email <span className="font-normal text-slate-400">Optional</span>
+                <input
+                  name="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3.5 font-normal outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+            </div>
+
+            <label className="mt-5 flex items-start gap-2.5 text-sm leading-5 text-slate-600">
+              <input
+                type="checkbox"
+                checked={acceptedPolicy}
+                onChange={(event) => setAcceptedPolicy(event.target.checked)}
+                required
+                className="mt-0.5 h-4 w-4 accent-emerald-600"
+              />
+              <span>I agree to Wazobia&apos;s Terms of Service and Privacy Policy.</span>
+            </label>
+
+            <button
+              type="submit"
+              className="mt-6 h-12 w-full rounded-full bg-emerald-500 font-semibold text-white transition-colors hover:bg-emerald-600"
+            >
+              Continue
+            </button>
+          </form>
+        </main>
+      ) : (
+        <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-stretch gap-3 px-4 sm:px-6 pb-3 pt-1 max-w-[1500px] w-full mx-auto">
+          {/* stage */}
+          <div className="flex-1 flex flex-col items-center justify-start min-h-0 pt-4 lg:pt-8">
+            <div className="w-full max-w-[34rem] h-[42vh] lg:h-[68vh] max-h-[68vh] [&>div]:h-full">
+              <CharacterViewer avatar={avatar} />
+            </div>
+            <span className="text-[11px] text-slate-400 -mt-1">drag to spin</span>
+          </div>
+
+          {/* panel */}
+          <aside className="w-full lg:w-[560px] shrink-0 bg-white rounded-[28px] shadow-[0_8px_30px_rgba(15,23,42,0.08)] p-4 flex flex-col max-h-[calc(100vh-104px)] overflow-hidden">
+            <div className="flex-1 overflow-hidden">
             <div className="flex items-center gap-2 bg-slate-100 rounded-full pl-4 pr-2 py-2">
               <span className="font-bold text-slate-800 text-sm">@{avatar.name.trim() ? avatar.name.trim().toLowerCase().replace(/\s+/g, "_") : "you"}</span>
               <input
@@ -248,16 +338,17 @@ export default function CreateCharacter() {
                 </Chip>
               ))}
             </div>
-          </div>
+            </div>
 
-          <button
-            onClick={enter}
-            className="mt-3 w-full py-3 rounded-full bg-emerald-500 text-white font-semibold text-base hover:bg-emerald-600 transition-colors"
-          >
-            Continue
-          </button>
-        </aside>
-      </main>
+            <button
+              onClick={enter}
+              className="mt-3 w-full py-3 rounded-full bg-emerald-500 text-white font-semibold text-base hover:bg-emerald-600 transition-colors"
+            >
+              Continue
+            </button>
+          </aside>
+        </main>
+      )}
     </div>
   );
 }

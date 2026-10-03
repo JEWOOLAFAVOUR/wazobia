@@ -32,3 +32,9 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   overscroll-behavior: none;
 }
+
+/* drei Html venue labels must never steal canvas drags/clicks */
+.venue-label,
+.venue-label > div {
+  pointer-events: none !important;
+}
