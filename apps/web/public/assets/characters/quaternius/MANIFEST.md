@@ -47,3 +47,14 @@ convert albedo to JPEG/WebP, consider `.glb` packing (ui-guide §28).
   via community glTF-only mirror (github.com/J-Ponzo/gltf-universal-animation-library),
   file `glTF/AnimationLibrary_Godot_Standard.*`, clip `Idle_Loop`.
 - Do NOT mix these characters with other art styles (ui-guide §24).
+
+## Customization notes (Phase 2A)
+
+- Skin: albedo textures are mid-brown, no `baseColorFactor` — tones are material-color
+  tint multipliers (target ÷ sampled base: male `#986a4c`, female `#a4714f`).
+  See `game/character/appearance.ts`. 5 tones, immediate, no extra downloads.
+- Hair: each FullBody file bakes exactly ONE hairstyle (male mesh `Face`/MI_Hair_1,
+  female mesh `Eyebrows`/MI_Hair_2). The free tier's other hairstyles are separate
+  files not vendored here. Hair albedo is mid-gray (meant to be tinted), so hair
+  COLOR is also a tint multiplier — 3 shades implemented, dark default doubles
+  as a fix for the ashy untinted look.

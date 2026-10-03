@@ -5,12 +5,13 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { CHARACTERS, IDLE_CLIP_NAME, IDLE_LIBRARY_URL, type CharacterId } from "./characters";
+import { applyAppearance } from "./appearance";
 import { remapIdleClip } from "./remap";
 
 for (const c of CHARACTERS) useGLTF.preload(c.modelUrl);
 useGLTF.preload(IDLE_LIBRARY_URL);
 
-function CharacterModel({ id }: { id: CharacterId }) {
+function CharacterModel({ id, skin, hair }: { id: CharacterId; skin: string; hair: string }) {
   const entry = CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
   const { scene } = useGLTF(entry.modelUrl);
   const { animations } = useGLTF(IDLE_LIBRARY_URL);
@@ -39,10 +40,15 @@ function CharacterModel({ id }: { id: CharacterId }) {
     mixer.current?.update(Math.min(rawDt, 0.05));
   });
 
+  // Appearance touches materials only — the idle mixer keeps running.
+  useEffect(() => {
+    applyAppearance(scene, id, skin, hair);
+  }, [scene, id, skin, hair]);
+
   return <primitive object={scene} />;
 }
 
-export default function CharacterViewer({ id }: { id: CharacterId }) {
+export default function CharacterViewer({ id, skin, hair }: { id: CharacterId; skin: string; hair: string }) {
   return (
     <Canvas
       camera={{ position: [0, 1.45, 3.4], fov: 34 }}
@@ -54,7 +60,7 @@ export default function CharacterViewer({ id }: { id: CharacterId }) {
       <directionalLight position={[2.5, 4, 3]} intensity={1.6} castShadow />
       <directionalLight position={[-3, 2, -2]} intensity={0.45} />
       <Suspense fallback={null}>
-        <CharacterModel key={id} id={id} />
+        <CharacterModel key={id} id={id} skin={skin} hair={hair} />
       </Suspense>
       <ContactShadows position={[0, 0.001, 0]} scale={6} blur={2.6} opacity={0.55} far={2.5} />
       <OrbitControls

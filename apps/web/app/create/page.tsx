@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { CHARACTERS, type CharacterId } from "@/game/character/characters";
+import { HAIR_COLORS, SKIN_TONES } from "@/game/character/appearance";
 
 const CharacterViewer = dynamic(() => import("@/game/character/CharacterViewer"), {
   ssr: false,
@@ -11,6 +12,8 @@ const CharacterViewer = dynamic(() => import("@/game/character/CharacterViewer")
 
 export default function CreateCharacter() {
   const [selected, setSelected] = useState<CharacterId>("male");
+  const [skin, setSkin] = useState("deep");
+  const [hair, setHair] = useState("black");
   const [fading, setFading] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -47,7 +50,7 @@ export default function CreateCharacter() {
           }}
         >
           <div className="w-full h-full [&>div]:h-full">
-            <CharacterViewer id={selected} />
+            <CharacterViewer id={selected} skin={skin} hair={hair} />
           </div>
         </div>
 
@@ -69,6 +72,47 @@ export default function CreateCharacter() {
           ))}
         </div>
         <p className="text-xs text-stone-500 -mt-3">{current.sub} · Quaternius base</p>
+
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="text-xs uppercase tracking-widest text-stone-500">Skin</span>
+          <div className="flex gap-2.5" role="radiogroup" aria-label="Skin tone">
+            {SKIN_TONES.map((t) => (
+              <button
+                key={t.id}
+                role="radio"
+                aria-checked={t.id === skin}
+                title={t.label}
+                aria-label={t.label}
+                onClick={() => setSkin(t.id)}
+                className={`w-8 h-8 rounded-full transition-transform duration-150 ${
+                  t.id === skin ? "ring-2 ring-stone-100 ring-offset-2 ring-offset-[#121110] scale-110" : "hover:scale-105"
+                }`}
+                style={{ backgroundColor: t.swatch }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="text-xs uppercase tracking-widest text-stone-500">Hair</span>
+          <div className="flex gap-2.5" role="radiogroup" aria-label="Hair color">
+            {HAIR_COLORS.map((h) => (
+              <button
+                key={h.id}
+                role="radio"
+                aria-checked={h.id === hair}
+                title={h.label}
+                aria-label={h.label}
+                onClick={() => setHair(h.id)}
+                className={`w-8 h-8 rounded-full transition-transform duration-150 ${
+                  h.id === hair ? "ring-2 ring-stone-100 ring-offset-2 ring-offset-[#121110] scale-110" : "hover:scale-105"
+                }`}
+                style={{ backgroundColor: h.swatch }}
+              />
+            ))}
+          </div>
+          <p className="text-xs text-stone-600">Pack-in cut · more styles need the Source tier</p>
+        </div>
 
         <button
           onClick={() => setDone(true)}
