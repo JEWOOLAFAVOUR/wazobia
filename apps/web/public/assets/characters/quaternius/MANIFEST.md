@@ -74,3 +74,38 @@ exactly (shells share its skin weights; props pin to its bones):
 | Sandals / Slides | Procedural sole + straps, sized from foot geometry | `AvatarModel.tsx` |
 | Cap / Head wrap | Procedural dome+brim / band+crown, fitted to measured head | `attachments.ts` |
 | Glasses / Watch / Backpack / Handbag | Procedural, placed from measured eye/wrist/torso landmarks | `attachments.ts` |
+
+## Real T-shirt (Poly by Google, CC-BY)
+
+- **Required attribution (reproduced verbatim):**
+  `T-shirt by Poly by Google [CC-BY] via Poly Pizza`
+- **File:** `public/assets/clothing/tops/poly-tee.glb` (182 KB, ~5.8k verts,
+  6 primitives, vertex colors, unrigged) + the author's original `.zip`
+  (`.obj` + `.mtl`, kept out of the repo).
+- **Source page:** https://poly.pizza/m/bdOMzzh-fSl (CC-BY 3.0, commercial use
+  permitted with attribution above).
+- **Integration:** nearest-vertex skin-weight transfer in
+  `game/character/fit.ts` — weights copied from the closest body vertex,
+  bound with the body's own bind matrix. No Blender step. Shell tops remain
+  as fallback options alongside it.
+
+## Official hairstyles (from the Standard ZIP, CC0)
+
+- **Source:** `Universal Base Characters[Standard].zip` →
+  `Hairstyles/Rigged to Head Bone/glTF (Godot -Unreal)/`
+  (https://quaternius.itch.io/universal-base-characters)
+- **Files:** `public/assets/characters/quaternius/hair/` —
+  `buzzed`, `buzzedfemale`, `buns`, `long`, `simpleparted` (`.gltf` + `.bin`,
+  ~700 KB total). Buffer + image URIs rewritten to lowercase filenames and
+  the shared base textures (no duplicates). Joint order verified identical
+  to the bodies, so they bind with `dressCharacter` directly. Base pack-in
+  hair hides when a style is worn.
+- Beard (`Hair_Beard`) and `Eyebrows_Regular` exist in the ZIP, not wired yet.
+
+## Decision log
+
+- Cornrows (OCBacon, Sketchfab CC-BY): download blocked — Sketchfab API 401,
+  and the user is region-blocked from downloading. Official Quaternius cuts
+  above cover the hair brief for now; cornrows remain the top pick if access opens.
+- Regular bodies: free tier is Superhero-only (confirmed from the official ZIP
+  contents). No Source purchase made.

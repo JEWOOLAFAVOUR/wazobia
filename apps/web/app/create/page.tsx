@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { saveAvatar } from "@/game/entry/avatarStore";
 import { CHARACTERS } from "@/game/character/characters";
 import { EYE_COLORS, HAIR_COLORS, SKIN_TONES } from "@/game/character/appearance";
+import { HAIR_STYLES } from "@/game/character/wardrobe";
 import {
   BOTTOM_COLORS,
   BOTTOM_LABELS,
@@ -98,6 +101,7 @@ function Pills<T extends string>({
 }
 
 export default function CreateCharacter() {
+  const router = useRouter();
   const [avatar, setAvatar] = useState<Avatar>(DEFAULT_AVATAR);
   const [step, setStep] = useState<Step>("Body");
   const [fading, setFading] = useState(false);
@@ -119,12 +123,12 @@ export default function CreateCharacter() {
     }, 180);
   };
 
-  const current = CHARACTERS.find((c) => c.id === avatar.body) ?? CHARACTERS[0];
   const topLabel = avatar.top ? TOP_LABELS[avatar.top.id] : "—";
   const bottomLabel = avatar.bottom ? BOTTOM_LABELS[avatar.bottom.id] : "—";
   const shoeLabel = avatar.shoes ? SHOE_LABELS[avatar.shoes.id] : "—";
   const skinLabel = SKIN_TONES.find((t) => t.id === avatar.skin)?.label ?? "";
-  const hairLabel = HAIR_COLORS.find((h) => h.id === avatar.hair)?.label ?? "";
+  const hairLabel = HAIR_COLORS.find((h) => h.id === avatar.hair.color)?.label ?? "";
+  const hairStyleLabel = HAIR_STYLES.find((h) => h.id === avatar.hair.style)?.label ?? "";
   const headLabel = avatar.headwear.id === "none" ? "—" : avatar.headwear.id === "cap" ? "Cap" : "Head wrap";
   const accLabel =
     avatar.accessory === "none" ? "—" : avatar.accessory === "glasses" ? "Glasses" : avatar.accessory === "watch" ? "Watch" : avatar.accessory === "backpack" ? "Backpack" : "Handbag";
@@ -172,7 +176,27 @@ export default function CreateCharacter() {
             />
             <Dots label="Skin" value={avatar.skin} onPick={(id) => patch({ skin: id })} options={SKIN_TONES} />
             <div className="flex gap-6 flex-wrap justify-center">
-              <Dots label="Hair" value={avatar.hair} onPick={(id) => patch({ hair: id })} options={HAIR_COLORS} />
+              <div className="flex flex-col items-center gap-1.5">
+                <span className="text-xs uppercase tracking-widest text-stone-500">Hairstyle</span>
+                <div className="flex gap-2 flex-wrap justify-center" role="radiogroup" aria-label="Hairstyle">
+                  {HAIR_STYLES.filter((h) => h.bodies.includes(avatar.body)).map((h) => (
+                    <button
+                      key={h.id}
+                      role="radio"
+                      aria-checked={avatar.hair.style === h.id}
+                      onClick={() => patch({ hair: { ...avatar.hair, style: h.id } })}
+                      className={`rounded-full px-4 py-1.5 text-xs transition-all duration-200 border ${
+                        avatar.hair.style === h.id
+                          ? "bg-stone-100 text-stone-900 border-stone-100 font-semibold"
+                          : "border-stone-700 text-stone-300 hover:border-stone-500"
+                      }`}
+                    >
+                      {h.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Dots label="Hair color" value={avatar.hair.color} onPick={(color) => patch({ hair: { ...avatar.hair, color } })} options={HAIR_COLORS} />
               <Dots
                 label="Eyes"
                 value={avatar.eyes}
@@ -181,7 +205,7 @@ export default function CreateCharacter() {
               />
             </div>
             <p className="text-xs text-stone-600">
-              {current.sub} · pack-in cut — more cuts need the Source tier
+              Official Quaternius cuts — more in the Source tier
             </p>
           </div>
         )}
@@ -194,12 +218,16 @@ export default function CreateCharacter() {
               onPick={(id: TopId) => patch({ top: { id, color: avatar.top?.color ?? TOP_COLORS[0] } })}
               options={(Object.keys(TOP_LABELS) as TopId[]).map((id) => ({ id, label: TOP_LABELS[id] }))}
             />
-            <Dots
-              label="Color"
-              value={avatar.top?.color ?? TOP_COLORS[0]}
-              onPick={(color) => avatar.top && patch({ top: { ...avatar.top, color } })}
-              options={TOP_COLORS.map((c) => ({ id: c, label: c, swatch: c }))}
-            />
+            {avatar.top?.id === "sporttee" ? (
+              <p className="text-xs text-stone-500">Poly by Google design · CC-BY — as designed</p>
+            ) : (
+              <Dots
+                label="Color"
+                value={avatar.top?.color ?? TOP_COLORS[0]}
+                onPick={(color) => avatar.top && patch({ top: { ...avatar.top, color } })}
+                options={TOP_COLORS.map((c) => ({ id: c, label: c, swatch: c }))}
+              />
+            )}
           </div>
         )}
 
@@ -305,7 +333,7 @@ export default function CreateCharacter() {
               {avatar.situation && <div className="text-stone-400">{avatar.situation}</div>}
             </div>
             <div className="text-stone-400 text-center leading-relaxed">
-              {skinLabel} skin · {hairLabel} hair
+              {skinLabel} skin · {hairStyleLabel}, {hairLabel} hair
               <br />
               {topLabel} · {bottomLabel} · {shoeLabel}
               <br />
@@ -334,7 +362,11 @@ export default function CreateCharacter() {
             </button>
           ) : (
             <button
-              onClick={() => setEntered(true)}
+              onClick={() => {
+                saveAvatar(avatar);
+                setEntered(true);
+                router.push("/enter");
+              }}
               className="rounded-full bg-amber-400 text-black font-semibold px-10 py-2.5 text-sm hover:bg-amber-300 transition-colors"
             >
               Enter Lagos

@@ -1,10 +1,30 @@
 import type { CharacterId } from "./characters";
 
+export type HairStyleId = "packin" | "buzzed" | "buzzedfemale" | "buns" | "long" | "simpleparted";
+
+export type HairStyle = {
+  id: HairStyleId;
+  label: string;
+  file: string | null;
+  bodies: CharacterId[];
+};
+
+export const HAIR_BASE_URL = "/assets/characters/quaternius/hair";
+
+export const HAIR_STYLES: HairStyle[] = [
+  { id: "packin", label: "Pack-in cut", file: null, bodies: ["male", "female"] },
+  { id: "buzzed", label: "Buzzed", file: `${HAIR_BASE_URL}/buzzed.gltf`, bodies: ["male"] },
+  { id: "buzzedfemale", label: "Short", file: `${HAIR_BASE_URL}/buzzedfemale.gltf`, bodies: ["female"] },
+  { id: "simpleparted", label: "Side part", file: `${HAIR_BASE_URL}/simpleparted.gltf`, bodies: ["male"] },
+  { id: "buns", label: "Buns", file: `${HAIR_BASE_URL}/buns.gltf`, bodies: ["female"] },
+  { id: "long", label: "Long", file: `${HAIR_BASE_URL}/long.gltf`, bodies: ["male", "female"] },
+];
+
 // Full avatar state — local frontend state only (no backend in Phase 2B).
 export type Avatar = {
   body: CharacterId;
   skin: string;
-  hair: string;
+  hair: { style: HairStyleId; color: string };
   eyes: string;
   top: { id: TopId; color: string } | null;
   bottom: { id: BottomId; color: string } | null;
@@ -15,7 +35,7 @@ export type Avatar = {
   situation: string;
 };
 
-export type TopId = "tee" | "polo" | "shirt" | "longsleeve" | "native";
+export type TopId = "sporttee" | "tee" | "polo" | "shirt" | "longsleeve" | "native";
 export type BottomId = "trousers" | "jeans" | "shorts" | "skirt";
 export type ShoeId = "sneakers" | "leather" | "sandals" | "slides";
 export type HeadwearId = "none" | "cap" | "wrap";
@@ -24,9 +44,9 @@ export type AccessoryId = "none" | "glasses" | "watch" | "backpack" | "handbag";
 export const DEFAULT_AVATAR: Avatar = {
   body: "male",
   skin: "deep",
-  hair: "black",
+  hair: { style: "packin", color: "black" },
   eyes: "espresso",
-  top: { id: "tee", color: "#2e6b46" },
+  top: { id: "sporttee", color: "#f5f3ee" },
   bottom: { id: "jeans", color: "#2f4a6b" },
   shoes: { id: "sneakers", color: "#eceae6" },
   headwear: { id: "none", color: "#1c1a18" },
@@ -36,12 +56,15 @@ export const DEFAULT_AVATAR: Avatar = {
 };
 
 export const TOP_LABELS: Record<TopId, string> = {
+  sporttee: "Sport T-shirt",
   tee: "T-shirt",
   polo: "Polo",
   shirt: "Button-up",
   longsleeve: "Long-sleeve",
   native: "Native top",
 };
+
+export const REAL_TEE_URL = "/assets/clothing/tops/poly-tee.glb";
 
 export const BOTTOM_LABELS: Record<BottomId, string> = {
   trousers: "Trousers",

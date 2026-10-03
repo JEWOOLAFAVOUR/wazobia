@@ -1,8 +1,9 @@
 import * as THREE from "three";
 
-// The animation library ships Blender `DEF-` bone names
-// (DEF-hips, DEF-thigh.L, DEF-f_index.01.L, …) while the Godot/UE character
-// exports use short names (pelvis, thigh_l, index_01_l, …).
+// The animation library ships Blender `DEF-` bone names, but three.js strips
+// dots when it builds track names, so the loaded clip arrives as
+// `DEF-spine001`, `DEF-thighL`, `DEF-f_index01L`, … while our Godot/UE
+// character export uses `spine_01`, `thigh_l`, `index_01_l`, …
 // Same rig, same rest pose — only the names differ — so the Idle_Loop clip
 // is retargeted by renaming its tracks. Unmapped tracks are dropped.
 const SPECIAL: Record<string, string> = {
@@ -16,18 +17,21 @@ const SPECIAL: Record<string, string> = {
   shin: "calf",
 };
 
-export function mapBone(defName: string): string | null {
-  if (!defName.startsWith("DEF-")) return null;
-  let n = defName.slice(4);
+export function mapBone(loaded: string): string | null {
+  if (loaded === "root") return "root";
+  if (!loaded.startsWith("DEF-")) return null;
+  let n = loaded.slice(4);
   let side = "";
-  if (n.endsWith(".L")) {
-    side = "_l";
-    n = n.slice(0, -2);
-  } else if (n.endsWith(".R")) {
-    side = "_r";
-    n = n.slice(0, -2);
+  if (n.endsWith("L") || n.endsWith("R")) {
+    side = n.endsWith("L") ? "_l" : "_r";
+    n = n.slice(0, -1);
   }
-  n = n.replace(/\./g, "_").replace(/^f_/, "").replace(/_00(\d)$/, "_0$1");
+  // fingers: f_index01 -> index_01 ; spine001 -> spine_01 ; thumb01 -> thumb_01
+  if (/^spine00\d$/.test(n)) {
+    n = `spine_0${n.slice(-1)}`;
+  } else {
+    n = n.replace(/^f_/, "").replace(/(\d+)$/, "_$1");
+  }
   n = SPECIAL[n] ?? n;
   return n + side;
 }

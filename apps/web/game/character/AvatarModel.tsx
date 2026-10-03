@@ -5,8 +5,10 @@ import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { CHARACTERS, IDLE_CLIP_NAME, IDLE_LIBRARY_URL } from "./characters";
+import { HAIR_BASE_URL, REAL_TEE_URL } from "./wardrobe";
 import { applyAppearance } from "./appearance";
 import { remapIdleClip } from "./remap";
+import { fitUnrigged } from "./fit";
 import {
   FOOT_JOINTS,
   LEG_JOINTS,
@@ -70,13 +72,18 @@ function jointBBox(body: THREE.SkinnedMesh, joints: string[]): THREE.Box3 {
   const v = new THREE.Vector3();
   body.updateWorldMatrix(true, false);
   for (let i = 0; i < pos.count; i++) {
-    let best = 0;
-    let bestW = -1;
-    for (let k = 0; k < 4; k++) {
-      const w = sw.getX(i * 4 + k);
-      if (w > bestW) {
-        bestW = w;
-        best = si.getX(i * 4 + k);
+    const jw: Array<[number, number]> = [
+      [si.getX(i), sw.getX(i)],
+      [si.getY(i), sw.getY(i)],
+      [si.getZ(i), sw.getZ(i)],
+      [si.getW(i), sw.getW(i)],
+    ];
+    let best = jw[0][0];
+    let bestW = jw[0][1];
+    for (let k = 1; k < 4; k++) {
+      if (jw[k][1] > bestW) {
+        bestW = jw[k][1];
+        best = jw[k][0];
       }
     }
     if (!allow.has(bones[best]?.name)) continue;
@@ -95,8 +102,14 @@ export function AvatarModel({ avatar }: { avatar: Avatar }) {
   const entry = CHARACTERS.find((c) => c.id === avatar.body) ?? CHARACTERS[0];
   const { scene } = useGLTF(entry.modelUrl);
   const { animations } = useGLTF(IDLE_LIBRARY_URL);
+  const hairBuzzed = useGLTF(`${HAIR_BASE_URL}/buzzed.gltf`);
+  const hairBuzzedFemale = useGLTF(`${HAIR_BASE_URL}/buzzedfemale.gltf`);
+  const hairBuns = useGLTF(`${HAIR_BASE_URL}/buns.gltf`);
+  const hairLong = useGLTF(`${HAIR_BASE_URL}/long.gltf`);
+  const hairSimple = useGLTF(`${HAIR_BASE_URL}/simpleparted.gltf`);
+  const sportTee = useGLTF(REAL_TEE_URL);
   const mixer = useRef<THREE.AnimationMixer | null>(null);
-  const built = useRef<{ obj: THREE.Object3D; geo: THREE.BufferGeometry[]; mat: THREE.Material[] }[]>([]);
+  const built = useRef<{ obj: THREE.Object3D; geo: THREE.BufferGeometry[]; mat: THREE.Material[]; dispose: boolean }[]>([]);
 
   const idle = useMemo(() => {
     const clip = animations.find((a) => a.name === IDLE_CLIP_NAME);
@@ -118,22 +131,24 @@ export function AvatarModel({ avatar }: { avatar: Avatar }) {
   }, [scene, idle]);
 
   useEffect(() => {
-    applyAppearance(scene, avatar.body, avatar.skin, avatar.hair, avatar.eyes);
+    applyAppearance(scene, avatar.body, avatar.skin, avatar.hair.color, avatar.eyes);
   }, [scene, avatar.body, avatar.skin, avatar.hair, avatar.eyes]);
 
   useFrame((_, rawDt) => {
     mixer.current?.update(Math.min(rawDt, 0.05));
   });
 
-  // Wardrobe build — shells, skirt, collar, headwear, accessories.
+  // Wardrobe build — shells, real fitted tee, real hair, skirt, collar, headwear, accessories.
   useEffect(() => {
     for (const b of built.current) {
       b.obj.parent?.remove(b.obj);
-      b.geo.forEach((g) => g.dispose());
-      b.mat.forEach((m) => m.dispose());
+      if (b.dispose) {
+        b.geo.forEach((g) => g.dispose());
+        b.mat.forEach((m) => m.dispose());
+      }
     }
     built.current = [];
-    const track = (obj: THREE.Object3D) => {
+    const track = (obj: THREE.Object3D, dispose = true) => {
       const geo: THREE.BufferGeometry[] = [];
       const mat: THREE.Material[] = [];
       obj.traverse((o) => {
@@ -144,7 +159,7 @@ export function AvatarModel({ avatar }: { avatar: Avatar }) {
           ms.forEach((m) => m && mat.push(m as THREE.Material));
         }
       });
-      built.current.push({ obj, geo, mat });
+      built.current.push({ obj, geo, mat, dispose });
     };
 
     scene.updateMatrixWorld(true);
@@ -155,6 +170,19 @@ export function AvatarModel({ avatar }: { avatar: Avatar }) {
     const chestDepth = new THREE.Box3().setFromObject(body).getSize(new THREE.Vector3()).z;
 
     if (avatar.top) {
+      if (avatar.top.id === "sporttee") {
+        // Real fitted mesh (Poly by Google, CC-BY) — no shell underneath.
+        const fitted = fitUnrigged(scene, body, sportTee.scene, `sporttee-${avatar.body}`);
+        fitted.meshes.forEach((mesh) => {
+          dressCharacter(scene, body, mesh);
+          track(mesh, false);
+        });
+        if (!fitted.cached) {
+          console.log(
+            `[wardrobe] sport tee fit: ${fitted.report.verts} verts, mean gap ${fitted.report.meanGapMm.toFixed(1)}mm, max ${fitted.report.maxGapMm.toFixed(1)}mm, scale ${fitted.report.scale.toFixed(3)}`,
+          );
+        }
+      } else {
       const def = topDef(avatar.top.id, lm);
       const shell = buildShell(body, def, cloth(avatar.top.color));
       if (shell) {
@@ -181,7 +209,38 @@ export function AvatarModel({ avatar }: { avatar: Avatar }) {
           track(buttons);
         }
       }
+      }
     }
+
+    // Real hairstyle (official Quaternius separate): dress the style mesh,
+    // hide the pack-in hair underneath. Shared cached scene — never disposed.
+    const styleScenes: Record<string, THREE.Object3D> = {
+      buzzed: hairBuzzed.scene,
+      buzzedfemale: hairBuzzedFemale.scene,
+      buns: hairBuns.scene,
+      long: hairLong.scene,
+      simpleparted: hairSimple.scene,
+    };
+    const styleScene = styleScenes[avatar.hair.style] ?? null;
+    if (styleScene) {
+      styleScene.traverse((o) => {
+        const mesh = o as THREE.SkinnedMesh;
+        if (!mesh.isSkinnedMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        if (!mats.some((m) => m && (m as THREE.Material).name.startsWith("MI_Hair"))) return;
+        mesh.userData.quatHair = true;
+        dressCharacter(scene, body, mesh);
+        track(mesh, false);
+      });
+    }
+    scene.traverse((o) => {
+      const mesh = o as THREE.SkinnedMesh;
+      if (!mesh.isSkinnedMesh || mesh.userData.quatHair) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      if (mats.some((m) => m && (m as THREE.Material).name.startsWith("MI_Hair"))) {
+        mesh.visible = avatar.hair.style === "packin";
+      }
+    });
 
     if (avatar.bottom) {
       if (avatar.bottom.id === "skirt" && avatar.body === "female") {
@@ -292,12 +351,14 @@ export function AvatarModel({ avatar }: { avatar: Avatar }) {
     return () => {
       for (const b of built.current) {
         b.obj.parent?.remove(b.obj);
-        b.geo.forEach((g) => g.dispose());
-        b.mat.forEach((m) => m.dispose());
+        if (b.dispose) {
+          b.geo.forEach((g) => g.dispose());
+          b.mat.forEach((m) => m.dispose());
+        }
       }
       built.current = [];
     };
-  }, [scene, avatar.body, avatar.top, avatar.bottom, avatar.shoes, avatar.headwear, avatar.accessory]);
+  }, [scene, avatar.body, avatar.top, avatar.bottom, avatar.shoes, avatar.headwear, avatar.accessory, avatar.hair, hairBuzzed, hairBuzzedFemale, hairBuns, hairLong, hairSimple, sportTee]);
 
   return <primitive object={scene} />;
 }

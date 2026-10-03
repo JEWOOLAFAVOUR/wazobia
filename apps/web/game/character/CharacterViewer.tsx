@@ -4,11 +4,16 @@ import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
 import { CHARACTERS, IDLE_LIBRARY_URL } from "./characters";
+import { HAIR_BASE_URL, REAL_TEE_URL } from "./wardrobe";
 import { AvatarModel } from "./AvatarModel";
 import type { Avatar } from "./wardrobe";
 
 for (const c of CHARACTERS) useGLTF.preload(c.modelUrl);
 useGLTF.preload(IDLE_LIBRARY_URL);
+useGLTF.preload(REAL_TEE_URL);
+for (const f of ["buzzed", "buzzedfemale", "buns", "long", "simpleparted"]) {
+  useGLTF.preload(`${HAIR_BASE_URL}/${f}.gltf`);
+}
 
 export default function CharacterViewer({ avatar }: { avatar: Avatar }) {
   return (

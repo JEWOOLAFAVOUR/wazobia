@@ -71,16 +71,15 @@ function dominantJoint(
   vi: number,
   bones: THREE.Bone[],
 ): string {
+  // NOTE: itemSize is 4, so vertex vi's joints are the X/Y/Z/W components
+  // of item vi — NOT items vi*4+k (that reads neighbouring vertices).
+  const j = [skinIndex.getX(vi), skinIndex.getY(vi), skinIndex.getZ(vi), skinIndex.getW(vi)];
+  const w = [skinWeight.getX(vi), skinWeight.getY(vi), skinWeight.getZ(vi), skinWeight.getW(vi)];
   let best = 0;
-  let bestW = -1;
-  for (let k = 0; k < 4; k++) {
-    const w = skinWeight.getX(vi * 4 + k);
-    if (w > bestW) {
-      bestW = w;
-      best = skinIndex.getX(vi * 4 + k);
-    }
+  for (let k = 1; k < 4; k++) {
+    if (w[k] > w[best]) best = k;
   }
-  return bones[best]?.name ?? "";
+  return bones[j[best]]?.name ?? "";
 }
 
 export function buildShell(
