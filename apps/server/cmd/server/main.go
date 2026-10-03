@@ -19,6 +19,7 @@ import (
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/business"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/economy"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/life"
+	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/social"
 	infra_pg "github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/infrastructure/postgres"
 	infra_redis "github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/infrastructure/redis"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/platform/config"
@@ -48,6 +49,7 @@ func main() {
 	economySvc := economy.NewService(pg)
 	lifeSvc := life.NewService(pg)
 	bizSvc := business.NewService(pg)
+	socialSvc := social.NewService(pg)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
@@ -72,6 +74,7 @@ func main() {
 	economySvc.Routes(authSvc.RequireAuth, r)
 	lifeSvc.Routes(authSvc.RequireAuth, r)
 	bizSvc.Routes(authSvc.RequireAuth, r)
+	socialSvc.Routes(authSvc.RequireAuth, r)
 	r.Get("/ws", hub.ServeWS)
 
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r}

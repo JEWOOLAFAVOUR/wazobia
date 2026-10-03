@@ -12,6 +12,7 @@ import AuthBox from "@/components/AuthBox";
 import ShopPanel from "@/components/ShopPanel";
 import LifePanel from "@/components/LifePanel";
 import BusinessPanel from "@/components/BusinessPanel";
+import SocialPanel from "@/components/SocialPanel";
 
 const YabaScene = dynamic(() => import("@/game/world/YabaScene"), { ssr: false });
 
@@ -73,9 +74,10 @@ export default function Home() {
         </div>
         <LifePanel refreshKey={walletKey} onMoney={() => setWalletKey((k) => k + 1)} />
         <BusinessPanel refreshKey={walletKey} onMoney={() => setWalletKey((k) => k + 1)} />
+        <SocialPanel refreshKey={walletKey} onMoney={() => setWalletKey((k) => k + 1)} />
         <div className="rounded-xl border border-zinc-800 p-4 text-sm">
-          <div className="font-semibold mb-1">Phase 6 — businesses</div>
-          <p className="text-zinc-400">Open a business (₦20,000 license) → set prices → restock from the wholesaler at 60% → customers buy (till grows) → hire staff → payroll → withdraw. Closed shops reject buyers; every cash move is a ledger TX.</p>
+          <div className="font-semibold mb-1">Phase 7 — social</div>
+          <p className="text-zinc-400">Add friends by email, found clubs and associations, host ticketed events — tickets move through the ledger from attendee to host. One event can create a temporary economy.</p>
         </div>
       </main>
     </div>
