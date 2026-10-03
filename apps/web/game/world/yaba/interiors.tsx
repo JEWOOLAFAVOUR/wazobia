@@ -245,6 +245,3 @@ export function ApartmentInterior({ plot }: { plot: Plot }) {
     </InteriorGroup>
   );
 }
-
-/** Interior furniture colliders + interactables (see interiorLayout — single source). */
-export { interiorColliders as _interiorCollidersUnused } from "./interiorLayout";
