@@ -21,6 +21,7 @@ import (
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/platform/config"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/platform/logging"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/player"
+	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/presence"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/world"
 )
 
@@ -40,6 +41,7 @@ func main() {
 	authSvc := auth.NewService(pg, cfg.JWTSecret)
 	playerH := &player.Handler{DB: pg}
 	worldH := &world.Handler{}
+	presenceSvc := presence.NewService(rdb)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
@@ -60,6 +62,7 @@ func main() {
 	authSvc.RegisterRoutes(r)
 	playerH.Routes(authSvc.RequireAuth, r)
 	worldH.Routes(r)
+	presenceSvc.Routes(r)
 	r.Get("/ws", hub.ServeWS)
 
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r}

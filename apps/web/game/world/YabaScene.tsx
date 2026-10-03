@@ -1,31 +1,33 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import type { Building } from "@/lib/api";
 import { nearestBuilding } from "@/lib/collision";
-import { useSocket } from "@/game/networking/useSocket";
+import type { useSocket } from "@/game/networking/useSocket";
 import YabaMap from "@/game/world/YabaMap";
 import { LocalPlayer, RemotePlayers, type Pos } from "@/game/player/Player";
 import FollowCam from "@/game/camera/FollowCam";
 
 export type Proximity = { id: string; name: string; kind: string; d: number } | null;
+export type Socket = ReturnType<typeof useSocket>;
 
 export default function YabaScene({
   buildings,
-  userId,
+  posRef,
+  socket,
   onProximity,
   onCount,
 }: {
   buildings: Building[];
-  userId: string;
+  posRef: React.MutableRefObject<Pos>;
+  socket: Socket;
   onProximity?: (p: Proximity) => void;
   onCount?: (n: number) => void;
 }) {
-  const posRef = useRef<Pos>({ x: 0, z: 12 });
   const [follow, setFollow] = useState(true);
-  const { remotes, connected } = useSocket(userId, "zone-b", posRef);
+  const { remotes, connected } = socket;
 
   const handleMove = (x: number, z: number) => {
     const hit = nearestBuilding(x, z, buildings, 5.5);

@@ -10,6 +10,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/chat"
 	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/movement"
 )
 
@@ -31,6 +32,8 @@ type peer struct {
 	lastX, lastZ float64
 	lastAt      time.Time
 	hasPos      bool
+	// Chat rate limit: 1 msg / 500ms.
+	lastChat time.Time
 }
 
 func NewHub(rdb *redis.Client) *Hub {
@@ -52,7 +55,16 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	p := &peer{userID: userID, zone: zone, conn: c, send: make(chan []byte, 64)}
 	h.add(p)
-	defer func() { h.remove(p); _ = c.CloseNow() }()
+	h.broadcastZone(zone, mustJSON(map[string]interface{}{
+		"type": "join", "userId": userID, "zone": zone, "at": time.Now().Unix(),
+	}), p)
+	defer func() {
+		h.remove(p)
+		h.broadcastZone(zone, mustJSON(map[string]interface{}{
+			"type": "leave", "userId": userID, "zone": zone, "at": time.Now().Unix(),
+		}), p)
+		_ = c.CloseNow()
+	}()
 
 	// Presence heartbeat → Redis with TTL (guide.md §23). Never Postgres per frame.
 	if h.RDB != nil {
@@ -96,15 +108,30 @@ func (h *Hub) readLoop(ctx context.Context, p *peer) {
 		if h.RDB != nil {
 			_ = h.RDB.Expire(context.Background(), "presence:"+p.userID, 30*time.Second).Err()
 		}
-		if validated, ok := h.validateMove(p, data); ok {
-			h.broadcast(p.zone, validated, p)
-			// Refresh position in Redis (ephemeral only).
-			if h.RDB != nil {
-				var msg map[string]interface{}
-				if json.Unmarshal(validated, &msg) == nil {
-					_ = h.RDB.HSet(context.Background(), "presence:"+p.userID, map[string]interface{}{
-						"x": msg["x"], "z": msg["z"], "lastSeen": time.Now().Unix(),
-					}).Err()
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(data, &envelope); err != nil {
+			continue
+		}
+		switch envelope["type"] {
+		case "move":
+			if validated, ok := h.validateMove(p, envelope); ok {
+				h.broadcastZone(p.zone, validated, p)
+				if h.RDB != nil {
+					var msg map[string]interface{}
+					if json.Unmarshal(validated, &msg) == nil {
+						_ = h.RDB.HSet(context.Background(), "presence:"+p.userID, map[string]interface{}{
+							"x": msg["x"], "z": msg["z"], "lastSeen": time.Now().Unix(),
+						}).Err()
+					}
+				}
+			}
+		case "chat":
+			if out, ok := h.validateChat(p, envelope); ok {
+				scope, _ := envelope["scope"].(string)
+				if scope == "global" {
+					h.broadcastAll(out, nil)
+				} else {
+					h.broadcastZone(p.zone, out, nil)
 				}
 			}
 		}
@@ -113,14 +140,7 @@ func (h *Hub) readLoop(ctx context.Context, p *peer) {
 
 // validateMove parses a client move intent, clamps it server-side, and
 // returns the authoritative payload to relay. Non-move messages pass through.
-func (h *Hub) validateMove(p *peer, data []byte) ([]byte, bool) {
-	var msg map[string]interface{}
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, false
-	}
-	if msg["type"] != "move" {
-		return data, true
-	}
+func (h *Hub) validateMove(p *peer, msg map[string]interface{}) ([]byte, bool) {
 	x, _ := msg["x"].(float64)
 	z, _ := msg["z"].(float64)
 	now := time.Now()
@@ -152,6 +172,10 @@ func (h *Hub) writeLoop(ctx context.Context, p *peer) {
 }
 
 func (h *Hub) broadcast(zone string, data []byte, skip *peer) {
+	h.broadcastZone(zone, data, skip)
+}
+
+func (h *Hub) broadcastZone(zone string, data []byte, skip *peer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for sub := range h.subs[zone] {
@@ -163,4 +187,45 @@ func (h *Hub) broadcast(zone string, data []byte, skip *peer) {
 		default:
 		}
 	}
+}
+
+func (h *Hub) broadcastAll(data []byte, skip *peer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, subs := range h.subs {
+		for sub := range subs {
+			if sub == skip {
+				continue
+			}
+			select {
+			case sub.send <- data:
+			default:
+			}
+		}
+	}
+}
+
+// validateChat enforces scope, length and rate limit; stamps from/at.
+func (h *Hub) validateChat(p *peer, msg map[string]interface{}) ([]byte, bool) {
+	scope, _ := msg["scope"].(string)
+	text, _ := msg["text"].(string)
+	clean, ok := chat.ValidateChat(scope, text)
+	if !ok {
+		return nil, false
+	}
+	now := time.Now()
+	if now.Sub(p.lastChat) < 500*time.Millisecond {
+		return nil, false
+	}
+	p.lastChat = now
+	out, _ := json.Marshal(map[string]interface{}{
+		"type": "chat", "scope": scope, "from": p.userID,
+		"zone": p.zone, "text": clean, "at": now.Unix(),
+	})
+	return out, true
+}
+
+func mustJSON(v map[string]interface{}) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }

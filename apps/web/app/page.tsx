@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { api, fallbackBuildings, type Building } from "@/lib/api";
 import type { Proximity } from "@/game/world/YabaScene";
+import { useSocket } from "@/game/networking/useSocket";
+import ChatPanel from "@/components/ChatPanel";
+import PresenceList from "@/components/PresenceList";
 
 const YabaScene = dynamic(() => import("@/game/world/YabaScene"), { ssr: false });
 
@@ -13,6 +16,8 @@ export default function Home() {
   const [near, setNear] = useState<Proximity>(null);
   const [count, setCount] = useState(1);
   const userId = useMemo(() => `web-${Math.floor(Math.random() * 100000)}`, []);
+  const posRef = useRef({ x: 0, z: 12 });
+  const socket = useSocket(userId, "zone-b", posRef);
 
   useEffect(() => {
     api("/healthz")
@@ -30,29 +35,28 @@ export default function Home() {
         <div className="text-sm text-zinc-400">api: {health} · you: {userId} · {count} here</div>
       </header>
       <main className="w-full max-w-5xl px-6 pb-10 flex flex-col gap-4">
-        <YabaScene buildings={buildings} userId={userId} onProximity={setNear} onCount={setCount} />
+        <YabaScene buildings={buildings} posRef={posRef} socket={socket} onProximity={setNear} onCount={setCount} />
+        {socket.notices.slice(-3).map((n, i) => (
+          <div key={i} className="text-xs text-zinc-500">
+            {n.kind === "join" ? "→" : "←"} {n.userId} {n.kind === "join" ? "entered" : "left"} zone-b
+          </div>
+        ))}
         {near ? (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            Near <b>{near.name}</b> <span className="text-zinc-400">({near.kind}, {near.d.toFixed(1)}m)</span> — entering interiors lands in Phase 4 (economy). Movement + collision are live now.
+            Near <b>{near.name}</b> <span className="text-zinc-400">({near.kind}, {near.d.toFixed(1)}m)</span> — entering interiors lands in Phase 4 (economy). Chat below is live now.
           </div>
         ) : (
           <div className="rounded-xl border border-zinc-800 p-3 text-sm text-zinc-400">
-            Walk with <b className="text-zinc-200">WASD / arrows</b>, hold <b className="text-zinc-200">Shift</b> to run. Walk up to a building to see its prompt. Server clamps speed + bounds; no per-frame Postgres writes.
+            Walk with <b className="text-zinc-200">WASD / arrows</b>, hold <b className="text-zinc-200">Shift</b> to run. Server clamps speed + bounds; no per-frame Postgres writes.
           </div>
         )}
-        <div className="grid sm:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl border border-zinc-800 p-4">
-            <div className="font-semibold mb-1">Phase 2 — 3D world</div>
-            <p className="text-zinc-400">Follow-cam by default, orbit on toggle. AABB collision vs buildings, world bound ±55, remote players interpolated with name tags. Open two tabs → same zone-b → you see each other.</p>
-          </div>
-          <div className="rounded-xl border border-zinc-800 p-4">
-            <div className="font-semibold mb-1">Yaba ({buildings.length})</div>
-            <ul className="text-zinc-400">
-              {buildings.map((b) => (
-                <li key={b.id}>· {b.name} <span className="text-zinc-600">({b.kind}, {b.zone})</span></li>
-              ))}
-            </ul>
-          </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <ChatPanel chats={socket.chats} onSend={socket.sendChat} />
+          <PresenceList zone="zone-b" />
+        </div>
+        <div className="rounded-xl border border-zinc-800 p-4 text-sm">
+          <div className="font-semibold mb-1">Phase 3 — multiplayer</div>
+          <p className="text-zinc-400">WS: move (10Hz, validated) + chat (zone/global, 280 chars, 500ms limit) + join/leave. Interest: zone-only for moves; global reaches all zones. Presence: Redis TTL, <code>/api/presence?zone=zone-b</code> polls every 5s.</p>
         </div>
       </main>
     </div>
