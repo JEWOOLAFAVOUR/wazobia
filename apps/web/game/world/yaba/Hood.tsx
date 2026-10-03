@@ -239,7 +239,7 @@ function FacadeDetails({ plot, wallH, ghost }: { plot: Plot; wallH: number; ghos
   );
 }
 
-export function PlotShell({ plot, ghost }: { plot: Plot; ghost: boolean }) {
+export function PlotShell({ plot, ghost, roof = true }: { plot: Plot; ghost: boolean; roof?: boolean }) {
   const boxes = wallBoxes(plot);
   const front = plot.enterable ? boxes.slice(0, 2) : [];
   const rest = plot.enterable ? boxes.slice(2) : boxes;
@@ -260,17 +260,18 @@ export function PlotShell({ plot, ghost }: { plot: Plot; ghost: boolean }) {
           <meshStandardMaterial color={color} roughness={0.95} />
         </mesh>
       ))}
-      {plot.enterable ? (
-        <mesh position={[plot.x, wallH + 0.18, plot.z]}>
-          <boxGeometry args={[plot.w + 0.3, 0.36, plot.d + 0.3]} />
-          <meshStandardMaterial color="#3a3733" roughness={1} />
-        </mesh>
-      ) : (
-        <mesh position={[plot.x, wallH + 0.15, plot.z]} castShadow>
-          <boxGeometry args={[plot.w + 0.4, 0.3, plot.d + 0.4]} />
-          <meshStandardMaterial color="#4a4239" roughness={1} />
-        </mesh>
-      )}
+      {roof &&
+        (plot.enterable ? (
+          <mesh position={[plot.x, wallH + 0.18, plot.z]}>
+            <boxGeometry args={[plot.w + 0.3, 0.36, plot.d + 0.3]} />
+            <meshStandardMaterial color="#3a3733" roughness={1} />
+          </mesh>
+        ) : (
+          <mesh position={[plot.x, wallH + 0.15, plot.z]} castShadow>
+            <boxGeometry args={[plot.w + 0.4, 0.3, plot.d + 0.4]} />
+            <meshStandardMaterial color="#4a4239" roughness={1} />
+          </mesh>
+        ))}
       {/* finished trim in plot-local frame (front = door side) */}
       <group position={[plot.x, 0, plot.z]} rotation={[0, yawOfPlot(plot), 0]}>
         <FacadeDetails plot={plot} wallH={wallH} ghost={ghost} />

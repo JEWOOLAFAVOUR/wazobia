@@ -20,13 +20,20 @@ const MIN_Y = 0.6;
 export default function EntryCamera({
   posRef,
   occluders,
+  maxPitch = 1.1,
 }: {
   posRef: React.MutableRefObject<EntryPos>;
   occluders?: Occluder[];
+  /** Higher values allow a dollhouse top-down view (home interiors). */
+  maxPitch?: number;
 }) {
   const { camera, gl } = useThree();
   const look = useRef(new THREE.Vector3());
   const orbit = useRef({ yaw: Math.PI, pitch: 0.42, dist: 7 });
+  const pitchMax = useRef(maxPitch);
+  useEffect(() => {
+    pitchMax.current = maxPitch;
+  }, [maxPitch]);
   const effDist = useRef(7);
   const boxes = useRef<Occluder[]>(occluders ?? []);
   useEffect(() => {
@@ -65,7 +72,7 @@ export default function EntryCamera({
       lx = e.clientX;
       ly = e.clientY;
       orbit.current.yaw -= dx * 0.005;
-      orbit.current.pitch = Math.max(0.12, Math.min(1.1, orbit.current.pitch + dy * 0.004));
+      orbit.current.pitch = Math.max(0.12, Math.min(pitchMax.current, orbit.current.pitch + dy * 0.004));
     };
     const up = () => {
       dragging = false;

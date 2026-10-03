@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html, MapControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -30,48 +30,69 @@ export function MapCamera({ focusRef }: { focusRef: React.MutableRefObject<MapFo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controls = useRef<any>(null);
   const camera = useThree((state) => state.camera);
-  const goal = useRef(new THREE.Vector3(0, 0, 0));
-  const last = useRef({ x: 0, z: 0 });
+  const goal = useRef(new THREE.Vector3());
+  const lastFocus = useRef({ x: 0, z: 0 });
+  const flying = useRef(false);
+  const userInteracting = useRef(false);
   const focus = useRef(focusRef);
   useEffect(() => {
     focus.current = focusRef;
   }, [focusRef]);
 
   useLayoutEffect(() => {
-    camera.position.set(225, 240, 225);
-    camera.lookAt(0, 0, 0);
-    controls.current?.target.set(0, 0, 0);
+    const initial = focusRef.current;
+    goal.current.set(initial.x, 0, initial.z);
+    lastFocus.current.x = initial.x;
+    lastFocus.current.z = initial.z;
+    camera.position.set(initial.x + 420, 460, initial.z + 420);
+    camera.lookAt(initial.x, 0, initial.z);
+    controls.current?.target.set(initial.x, 0, initial.z);
     controls.current?.update();
-  }, [camera]);
+  }, [camera, focusRef]);
+
+  const onStart = useCallback(() => {
+    userInteracting.current = true;
+    flying.current = false;
+  }, []);
+  const onEnd = useCallback(() => {
+    userInteracting.current = false;
+  }, []);
 
   useFrame((_, rawDt) => {
-    const c = controls.current as { target: THREE.Vector3; update: () => void } | null;
+    const c = controls.current as { target: THREE.Vector3 } | null;
     if (!c) return;
-    const dt = Math.min(rawDt, 0.05);
     const f = focus.current.current;
-    // External focus request (venue chip click) — fly target there.
-    if (last.current.x !== f.x || last.current.z !== f.z) {
-      last.current = { x: f.x, z: f.z };
+    if (userInteracting.current) {
+      flying.current = false;
+    } else if (lastFocus.current.x !== f.x || lastFocus.current.z !== f.z) {
       goal.current.set(f.x, 0, f.z);
+      flying.current = true;
     }
-    c.target.lerp(goal.current, 1 - Math.exp(-8 * dt));
-    // User panned — keep the ref in sync for the next external request.
-    goal.current.copy(c.target);
+    if (flying.current) {
+      c.target.lerp(goal.current, 1 - Math.exp(-8 * Math.min(rawDt, 0.05)));
+      if (c.target.distanceToSquared(goal.current) < 0.04) {
+        c.target.copy(goal.current);
+        flying.current = false;
+      }
+    }
     f.x = c.target.x;
     f.z = c.target.z;
-    c.update();
-  });
+    lastFocus.current.x = c.target.x;
+    lastFocus.current.z = c.target.z;
+  }, -2);
 
   return (
     <MapControls
       ref={controls}
       makeDefault
+      onStart={onStart}
+      onEnd={onEnd}
       enableRotate={false}
       enableDamping
       dampingFactor={0.12}
       screenSpacePanning={false}
       minDistance={18}
-      maxDistance={460}
+      maxDistance={920}
       maxPolarAngle={Math.PI / 3.2}
       mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }}
@@ -99,12 +120,22 @@ const CITY_ROADS: RoadSpec[] = [
   { id: "vi-north", axis: "x", center: 88, width: 7, from: -92, to: 66, main: false },
   { id: "vi-middle", axis: "x", center: 112, width: 6, from: -92, to: 66, main: false },
   { id: "vi-south", axis: "x", center: 138, width: 8, from: -92, to: 66, main: true },
-  { id: "lekki-west", axis: "z", center: 92, width: 7, from: 68, to: 198, main: true },
-  { id: "lekki-middle", axis: "z", center: 132, width: 5, from: 68, to: 198, main: false },
-  { id: "lekki-east", axis: "z", center: 174, width: 6, from: 68, to: 198, main: false },
-  { id: "lekki-north", axis: "x", center: 88, width: 6, from: 68, to: 198, main: false },
-  { id: "lekki-centre", axis: "x", center: 116, width: 8, from: 68, to: 198, main: true },
-  { id: "lekki-south", axis: "x", center: 151, width: 6, from: 68, to: 198, main: false },
+  { id: "lekki-west", axis: "z", center: 92, width: 10, from: 68, to: 260, main: true },
+  { id: "lekki-middle", axis: "z", center: 132, width: 5, from: 68, to: 260, main: false },
+  { id: "lekki-east", axis: "z", center: 174, width: 7, from: 68, to: 260, main: true },
+  { id: "lekki-coastal-link", axis: "z", center: 238, width: 8, from: 68, to: 215, main: true },
+  { id: "lekki-north", axis: "x", center: 88, width: 6, from: 68, to: 260, main: false },
+  { id: "lekki-centre", axis: "x", center: 132, width: 9, from: 68, to: 260, main: true },
+  { id: "lekki-south", axis: "x", center: 174, width: 7, from: 68, to: 260, main: true },
+  { id: "mainland-local-north", axis: "x", center: -43, width: 3.2, from: -150, to: 150, main: false },
+  { id: "mainland-local-mid", axis: "x", center: -20, width: 3.2, from: -150, to: 150, main: false },
+  { id: "mainland-local-south", axis: "x", center: 20, width: 3.2, from: -150, to: 150, main: false },
+  { id: "mainland-local-west", axis: "z", center: -43, width: 3.2, from: -135, to: 52, main: false },
+  { id: "mainland-local-east", axis: "z", center: 16, width: 3.2, from: -135, to: 52, main: false },
+  { id: "island-local-north", axis: "x", center: 99, width: 3.2, from: -96, to: 68, main: false },
+  { id: "island-local-south", axis: "x", center: 126, width: 3.2, from: -96, to: 68, main: false },
+  { id: "island-local-west", axis: "z", center: -48, width: 3.2, from: 82, to: 142, main: false },
+  { id: "island-local-east", axis: "z", center: 44, width: 3.2, from: 82, to: 142, main: false },
 ];
 
 function landGeometry(points: [number, number][]): THREE.ShapeGeometry {
@@ -123,35 +154,36 @@ const MAINLAND_GEOMETRY = landGeometry([
   [72, 59], [8, 53], [-66, 60], [-132, 53], [-157, 36], [-150, 8], [-160, -24], [-149, -60], [-158, -91],
 ]);
 const ISLAND_GEOMETRY = landGeometry([
-  [-113, 81], [-105, 94], [-108, 119], [-99, 137], [-80, 150], [-51, 151], [-28, 143],
-  [4, 151], [35, 143], [59, 139], [79, 125], [75, 105], [61, 88], [39, 80], [2, 76], [-38, 79], [-76, 76],
+  [-113, 81], [-105, 94], [-108, 119], [-99, 145], [-80, 164], [-51, 170], [-28, 160],
+  [4, 170], [35, 160], [59, 158], [79, 141], [75, 105], [61, 88], [39, 80], [2, 76], [-38, 79], [-76, 76],
 ]);
 const EKO_GEOMETRY = landGeometry([
   [-158, 84], [-104, 87], [-98, 102], [-102, 127], [-111, 146], [-137, 158], [-160, 146], [-166, 121],
 ]);
 const LEKKI_GEOMETRY = landGeometry([
   [48, 78], [68, 73], [92, 81], [112, 72], [140, 78], [163, 88], [190, 87],
-  [210, 103], [214, 128], [202, 148], [210, 163], [196, 182], [169, 187],
-  [140, 180], [110, 174], [91, 164], [77, 146], [67, 125], [56, 108],
+  [225, 90], [252, 105], [270, 126], [276, 151], [267, 176], [270, 196],
+  [250, 218], [221, 222], [196, 218], [170, 210], [140, 202], [110, 190],
+  [91, 174], [77, 151], [67, 125], [56, 108],
 ]);
 
-function RoadStrip({ road }: { road: RoadSpec }) {
+function RoadStrip({ road, elevation = 0.18 }: { road: RoadSpec; elevation?: number }) {
   const alongX = road.axis === "x";
   const length = road.to - road.from;
   const middle = (road.from + road.to) / 2;
   const at = (offset: number): [number, number, number] =>
     alongX
-      ? [middle, 0.16, road.center + offset]
-      : [road.center + offset, 0.16, middle];
+      ? [middle, elevation, road.center + offset]
+        : [road.center + offset, elevation, middle];
   const size = (width: number): [number, number] =>
     alongX ? [length, width] : [width, length];
   const dashCount = road.main ? Math.floor(length / 14) : 0;
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={alongX ? [middle, 0.16, road.center] : [road.center, 0.16, middle]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={alongX ? [middle, elevation, road.center] : [road.center, elevation, middle]}>
         <planeGeometry args={size(road.width)} />
-        <meshStandardMaterial color={road.main ? "#55534e" : "#625e54"} roughness={1} />
+        <meshStandardMaterial color={road.main ? "#4b4a47" : "#625e54"} roughness={1} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
       {[-1, 1].map((side) => (
         <mesh
@@ -169,7 +201,7 @@ function RoadStrip({ road }: { road: RoadSpec }) {
           <mesh
             key={i}
             rotation={[-Math.PI / 2, 0, 0]}
-            position={alongX ? [distance, 0.18, road.center] : [road.center, 0.18, distance]}
+            position={alongX ? [distance, elevation + 0.02, road.center] : [road.center, elevation + 0.02, distance]}
           >
             <planeGeometry args={alongX ? [4, 0.28] : [0.28, 4]} />
             <meshStandardMaterial color="#e2c967" roughness={1} />
@@ -179,6 +211,56 @@ function RoadStrip({ road }: { road: RoadSpec }) {
     </group>
   );
 }
+
+type LandmarkKind = "dining" | "office" | "hub" | "nightlife" | "beach" | "event" | "culture" | "nature" | "education" | "retail";
+type Landmark = {
+  name: string;
+  district: string;
+  category: string;
+  kind: LandmarkKind;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  h: number;
+  color: string;
+  accent: string;
+  featured?: boolean;
+};
+
+const LANDMARKS: Landmark[] = [
+  { name: "Korede Spaghetti", district: "Surulere", category: "Street food", kind: "dining", x: -126, z: -28, w: 17, d: 15, h: 6, color: "#e6c092", accent: "#c83d2b" },
+  { name: "Korede Spaghetti", district: "Yaba", category: "Restaurant", kind: "dining", x: 41, z: 28, w: 17, d: 15, h: 6, color: "#e8cf9f", accent: "#d54c32" },
+  { name: "CcHUB", district: "Yaba", category: "Innovation campus", kind: "hub", x: -38, z: 28, w: 22, d: 19, h: 12, color: "#d7e4e2", accent: "#f07832", featured: true },
+  { name: "UNILAG", district: "Akoka", category: "University", kind: "education", x: -64, z: -110, w: 28, d: 22, h: 15, color: "#dfd4b9", accent: "#3d8062" },
+  { name: "New Afrika Shrine", district: "Ikeja", category: "Live music", kind: "culture", x: 3, z: -119, w: 24, d: 19, h: 9, color: "#c99b64", accent: "#d43e2e", featured: true },
+  { name: "Balmoral Convention Centre", district: "Ikeja", category: "Events", kind: "event", x: 104, z: -112, w: 30, d: 23, h: 10, color: "#d5d7cf", accent: "#b48c52" },
+  { name: "Freedom Park", district: "Lagos Island", category: "Culture & live music", kind: "culture", x: -93, z: 111, w: 20, d: 18, h: 7, color: "#c4aa81", accent: "#4b7950", featured: true },
+  { name: "RSVP Lagos", district: "Victoria Island", category: "Fine dining", kind: "dining", x: -58, z: 102, w: 20, d: 17, h: 7, color: "#e9d9bf", accent: "#8c342d" },
+  { name: "The Yellow Chilli", district: "Victoria Island", category: "Nigerian dining", kind: "dining", x: -23, z: 102, w: 20, d: 17, h: 7, color: "#e1c391", accent: "#d47b29" },
+  { name: "Cactus Restaurant", district: "Victoria Island", category: "Restaurant & bakery", kind: "dining", x: 12, z: 102, w: 20, d: 17, h: 7, color: "#d5ddce", accent: "#56845d" },
+  { name: "Club Illusion", district: "Victoria Island", category: "Afrobeats club", kind: "nightlife", x: -59, z: 124, w: 20, d: 18, h: 10, color: "#353443", accent: "#ae51d8" },
+  { name: "Sky Bar MKT", district: "Victoria Island", category: "Rooftop lounge", kind: "nightlife", x: -23, z: 124, w: 20, d: 18, h: 12, color: "#424047", accent: "#f5b34f" },
+  { name: "Shades Social", district: "Victoria Island", category: "Bar & live music", kind: "nightlife", x: 12, z: 124, w: 20, d: 18, h: 9, color: "#514642", accent: "#df654d" },
+  { name: "Quilox", district: "Victoria Island", category: "Superclub", kind: "nightlife", x: 48, z: 101, w: 22, d: 19, h: 13, color: "#342c3c", accent: "#d13e87" },
+  { name: "Vaniti Lagos", district: "Victoria Island", category: "VIP nightlife", kind: "nightlife", x: 48, z: 124, w: 21, d: 18, h: 11, color: "#393541", accent: "#c8a1e0" },
+  { name: "Cubana", district: "Victoria Island", category: "Lounge & club", kind: "nightlife", x: 81, z: 120, w: 20, d: 18, h: 10, color: "#544239", accent: "#e0a13a" },
+  { name: "Eko Convention Centre", district: "Victoria Island", category: "Concerts & events", kind: "event", x: -91, z: 155, w: 30, d: 22, h: 11, color: "#d8d2c3", accent: "#b78749", featured: true },
+  { name: "The Civic Centre", district: "Victoria Island", category: "Waterfront events", kind: "event", x: 81, z: 157, w: 27, d: 20, h: 10, color: "#d6dedc", accent: "#4f9a9e" },
+  { name: "Terra Kulture", district: "Victoria Island", category: "Arts & theatre", kind: "culture", x: -126, z: 119, w: 20, d: 17, h: 8, color: "#d4bc91", accent: "#b74935" },
+  { name: "Landmark Beach", district: "Oniru", category: "Beach & events", kind: "beach", x: 111, z: 108, w: 25, d: 20, h: 6, color: "#e2ca93", accent: "#318eae" },
+  { name: "Hard Rock Cafe", district: "Oniru", category: "Restaurant & live music", kind: "dining", x: 146, z: 108, w: 22, d: 18, h: 8, color: "#d5c2a3", accent: "#c3372f" },
+  { name: "Landmark Event Centre", district: "Oniru", category: "Exhibitions & festivals", kind: "event", x: 182, z: 108, w: 29, d: 22, h: 10, color: "#d6d8d2", accent: "#d7a13d", featured: true },
+  { name: "Moist Beach Club", district: "Oniru", category: "Beach club", kind: "beach", x: 111, z: 153, w: 24, d: 19, h: 7, color: "#d9bd8b", accent: "#de6048" },
+  { name: "Sailor's Lounge", district: "Lekki Phase 1", category: "Waterfront lounge", kind: "beach", x: 148, z: 153, w: 23, d: 18, h: 7, color: "#d4c092", accent: "#3c8b9d" },
+  { name: "Bay Lounge / W Bar", district: "Lekki Phase 1", category: "Lagoon-view lounge", kind: "nightlife", x: 184, z: 153, w: 21, d: 18, h: 8, color: "#454049", accent: "#61a6cb" },
+  { name: "Elegushi Beach", district: "Lekki", category: "Beach & nightlife", kind: "beach", x: 111, z: 198, w: 27, d: 21, h: 6, color: "#e0c88e", accent: "#e27645" },
+  { name: "Monarch Event Centre", district: "Lekki", category: "Events", kind: "event", x: 148, z: 198, w: 27, d: 21, h: 10, color: "#d9d2c3", accent: "#c39a62" },
+  { name: "Upbeat Recreation Centre", district: "Lekki", category: "Games & recreation", kind: "retail", x: 184, z: 198, w: 24, d: 21, h: 9, color: "#d8d3c4", accent: "#56a9bd" },
+  { name: "Lekki Conservation Centre", district: "Lekki", category: "Nature & canopy walk", kind: "nature", x: 220, z: 180, w: 24, d: 22, h: 7, color: "#b8c69b", accent: "#3e8055", featured: true },
+  { name: "The Palms Mall", district: "Lekki", category: "Shopping & cinema", kind: "retail", x: 220, z: 153, w: 30, d: 22, h: 12, color: "#cfd5d2", accent: "#5597aa" },
+  { name: "Tarkwa Bay", district: "Lagos Coast", category: "Island beach", kind: "beach", x: -164, z: 190, w: 21, d: 17, h: 5, color: "#e4cf9e", accent: "#347fa0" },
+];
 
 function houseGrid(x0: number, z0: number, cols: number, rows: number, dx: number, dz: number, seed: number): House[] {
   const houses: House[] = [];
@@ -340,31 +422,105 @@ function CompoundWall({ x, z, w, d }: { x: number; z: number; w: number; d: numb
   );
 }
 
-function BusinessCluster({ x, z, color = "#d4d0c5" }: { x: number; z: number; color?: string }) {
+function LandmarkBuilding({ place }: { place: Landmark }) {
+  const camera = useThree((state) => state.camera);
+  const label = useRef<HTMLDivElement>(null);
+  const labelPosition = useMemo(() => new THREE.Vector3(place.x, place.h + 2.4, place.z), [place]);
+  const columns = Math.max(3, Math.floor(place.w / 4));
+  const floors = Math.max(1, Math.floor((place.h - 1) / 2.8));
+  const glass = place.kind === "nightlife" ? "#443c54" : "#52747a";
+  const isPavilion = place.kind === "beach";
+  const isGlass = place.kind === "office" || place.kind === "hub" || place.kind === "event" || place.kind === "retail";
+
+  useFrame(() => {
+    if (!label.current || place.featured) return;
+    const showLabel = camera.position.distanceToSquared(labelPosition) < 430 * 430;
+    label.current.style.visibility = showLabel ? "visible" : "hidden";
+  });
+
   return (
-    <group position={[x, 0, z]}>
-      {[
-        { x: -8, z: 1, w: 9, d: 9, h: 10 },
-        { x: 2, z: -3, w: 10, d: 8, h: 15 },
-        { x: 11, z: 2, w: 8, d: 10, h: 8 },
-      ].map((building, index) => (
-        <group key={index} position={[building.x, 0, building.z]}>
-          <mesh position={[0, building.h / 2, 0]} castShadow>
-            <boxGeometry args={[building.w, building.h, building.d]} />
-            <meshStandardMaterial color={color} roughness={0.85} />
-          </mesh>
-          {Array.from({ length: Math.floor(building.h / 2.5) }, (_, floor) => (
-            <mesh key={floor} position={[0, 1.5 + floor * 2.5, building.d / 2 + 0.03]}>
-              <boxGeometry args={[building.w * 0.72, 0.7, 0.06]} />
-              <meshStandardMaterial color="#41616a" roughness={0.35} metalness={0.1} />
+    <group position={[place.x, 0, place.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
+        <planeGeometry args={[place.w + 6, place.d + 6]} />
+        <meshStandardMaterial color={place.kind === "beach" ? "#d9c28e" : "#aaa69a"} roughness={1} />
+      </mesh>
+      <mesh position={[0, place.h / 2 + 0.35, 0]} castShadow>
+        <boxGeometry args={[place.w, place.h, place.d]} />
+        <meshStandardMaterial color={place.color} roughness={0.86} metalness={isGlass ? 0.08 : 0} />
+      </mesh>
+      {Array.from({ length: floors }, (_, floor) =>
+        Array.from({ length: columns }, (_, column) => {
+          const x = -place.w / 2 + ((column + 1) * place.w) / (columns + 1);
+          const y = 1.7 + floor * 2.55;
+          return (
+            <mesh key={`${floor}-${column}`} position={[x, y, place.d / 2 + 0.07]}>
+              <boxGeometry args={[Math.min(2.7, place.w / (columns + 1) * 0.55), 1.05, 0.1]} />
+              <meshStandardMaterial color={glass} roughness={0.35} metalness={0.12} />
             </mesh>
-          ))}
-          <mesh position={[0, building.h + 0.35, 0]}>
-            <boxGeometry args={[building.w + 0.5, 0.7, building.d + 0.5]} />
-            <meshStandardMaterial color="#b8784d" roughness={1} />
-          </mesh>
-        </group>
+          );
+        }),
+      )}
+      <mesh position={[0, place.h + 0.48, 0]}>
+        <boxGeometry args={[place.w + (isPavilion ? 4 : 1.5), 0.65, place.d + (isPavilion ? 4 : 1.5)]} />
+        <meshStandardMaterial color={place.accent} roughness={0.82} />
+      </mesh>
+      {(place.kind === "dining" || place.kind === "hub" || place.kind === "event") && (
+        <mesh position={[0, 1.35, place.d / 2 + 2]}>
+          <boxGeometry args={[place.w * 0.68, 0.28, 4]} />
+          <meshStandardMaterial color={place.accent} roughness={0.8} />
+        </mesh>
+      )}
+      {isPavilion && [-1, 1].map((side) => (
+        <mesh key={side} position={[side * (place.w / 2 - 1), place.h / 2, place.d / 2 - 1]}>
+          <boxGeometry args={[0.45, place.h, 0.45]} />
+          <meshStandardMaterial color="#efe0bf" roughness={1} />
+        </mesh>
       ))}
+      {place.kind === "nightlife" && (
+        <mesh position={[0, place.h * 0.62, place.d / 2 + 0.1]}>
+          <boxGeometry args={[place.w * 0.82, 0.45, 0.16]} />
+          <meshStandardMaterial color={place.accent} emissive={place.accent} emissiveIntensity={0.45} />
+        </mesh>
+      )}
+      {place.kind === "nature" && (
+        <mesh position={[place.w * 0.35, place.h + 4, -place.d * 0.28]}>
+          <boxGeometry args={[1.2, 8, 1.2]} />
+          <meshStandardMaterial color="#76553b" roughness={1} />
+        </mesh>
+      )}
+      <Html
+        center
+        position={[0, place.h + 2.4, 0]}
+        distanceFactor={180}
+        wrapperClass="venue-label"
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 1,
+            padding: "4px 8px",
+            borderRadius: 7,
+            borderLeft: `3px solid ${place.accent}`,
+            background: "rgba(24,31,34,0.92)",
+            boxShadow: "0 2px 8px rgba(0,0,0,.3)",
+            color: "white",
+            fontSize: 9,
+            fontWeight: 800,
+            lineHeight: 1.2,
+            letterSpacing: "0.02em",
+            textAlign: "left",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          <span ref={label}>{place.name}</span>
+          <span style={{ color: "#f1c989", fontSize: 7, fontWeight: 600 }}>
+            {place.category} · {place.district}
+          </span>
+        </div>
+      </Html>
     </group>
   );
 }
@@ -457,7 +613,7 @@ function RegionLabel({ position, children }: { position: [number, number, number
   );
 }
 
-/** Lightweight static Lagos slab — no interiors, no per-mesh useFrame. Coordinates match street 1:1. */
+/** Static, expanded Lagos city map. Playable Yaba roads and plots stay at their original coordinates. */
 export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }) {
   const roads = useMemo(() => ROADS, []);
   const cityRoads = useMemo(() => CITY_ROADS, []);
@@ -468,8 +624,8 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
   return (
     <group>
       {/* ocean */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.35, 20]}>
-        <planeGeometry args={[500, 500]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.35, 30]}>
+        <planeGeometry args={[760, 760]} />
         <meshStandardMaterial color="#6fb3d2" roughness={1} />
       </mesh>
       {/* mainland: Yaba grows into denser mixed residential and commercial districts */}
@@ -486,6 +642,10 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
       </mesh>
       <mesh geometry={LEKKI_GEOMETRY} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.13, 0]}>
         <meshStandardMaterial color="#b9c78e" roughness={1} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-164, 0.15, 190]}>
+        <circleGeometry args={[22, 40]} />
+        <meshStandardMaterial color="#e1cb96" roughness={1} />
       </mesh>
       {/* lagoon and beach edges */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.14, 64]}>
@@ -511,13 +671,14 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
         </mesh>
       ))}
       {/* connected, marked streets and the existing playable Yaba roads */}
-      {cityRoads.map((road) => <RoadStrip key={road.id} road={road} />)}
-      {roads.map((road) => <RoadStrip key={road.id} road={road} />)}
+      {cityRoads.map((road, index) => <RoadStrip key={road.id} road={road} elevation={0.17 + index * 0.0005} />)}
+      {roads.map((road, index) => <RoadStrip key={road.id} road={road} elevation={0.21 + index * 0.001} />)}
       {[-110, 0, 110].map((x) => <Bridge key={x} x={x} />)}
       {/* compounds and detached homes */}
       <EstateInstances houses={estates.mainland} />
       <EstateInstances houses={estates.island} />
       <EstateInstances houses={estates.lekki} />
+      {LANDMARKS.map((place) => <LandmarkBuilding key={`${place.name}-${place.district}`} place={place} />)}
       {[
         [-111, -115, 27, 21],
         [104, -115, 30, 21],
@@ -531,10 +692,7 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
       ].map(([x, z, w, d], index) => (
         <CompoundWall key={index} x={x} z={z} w={w} d={d} />
       ))}
-      {/* recognizable city centers and a busy open market row */}
-      <BusinessCluster x={0} z={-89} color="#c6c1b5" />
-      <BusinessCluster x={-39} z={110} color="#ded3bc" />
-      <BusinessCluster x={143} z={108} color="#c6d0ce" />
+      {/* a busy open market row beside the Yaba neighbourhood */}
       <MarketRow x={42} z={-36} />
       <group position={[-44, 0.16, -108]} rotation={[0, Math.PI / 2, 0]}>
         <Danfo position={[0, 0, 0]} />
@@ -590,6 +748,7 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
       <RegionLabel position={[-24, 0.5, 142]}>VICTORIA ISLAND</RegionLabel>
       <RegionLabel position={[145, 0.5, 174]}>LEKKI</RegionLabel>
       <RegionLabel position={[-126, 0.5, 160]}>EKO ATLANTIC</RegionLabel>
+      <RegionLabel position={[225, 0.5, 215]}>LEKKI · AJAH</RegionLabel>
     </group>
   );
 }

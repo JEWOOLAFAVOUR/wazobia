@@ -20,11 +20,8 @@ import { streetOccluders } from "@/game/world/yaba/occluders";
 import { HOME_SPAWN, LOCATIONS, navigateToLocation, type WorldLocation } from "@/game/navigation/locations";
 import EntryPlayer, { type EntryPos } from "@/game/player/EntryPlayer";
 import EntryCamera from "@/game/camera/EntryCamera";
-import EntryTransition from "@/game/ui/EntryTransition";
 import { LagosMapBlocks, MapCamera, type MapFocus } from "@/game/entry/LagosMap";
 import type { Interactable } from "@/game/world/YabaBlock";
-
-type Phase = "fade" | "title" | "world";
 
 const FILTERS = ["● Serious go-slow", "📢 Billboards", "🏘 Neighbours", "🌊 Sea", "🏛 Gov"];
 
@@ -88,8 +85,7 @@ function World() {
   const [homeSpawn, setHomeSpawn] = useState<EntryPos>({ ...HOME_SPAWN });
   const [showPlaces, setShowPlaces] = useState(false);
   const occluders = useMemo(() => streetOccluders(), []);
-  const mapFocus = useRef<MapFocus>({ x: 0, z: 0 });
-  const [phase, setPhase] = useState<Phase>("fade");
+  const mapFocus = useRef<MapFocus>({ x: 45, z: 24 });
   const [near, setNear] = useState<Interactable | null>(null);
   const [insideId, setInsideId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -108,16 +104,6 @@ function World() {
   };
 
   const { clock, status, online, formatBalance } = useCityStatus(true, tick);
-
-  // Intentional beat: black -> YABA/LAGOS -> world fades in.
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase("title"), 350);
-    const t2 = setTimeout(() => setPhase("world"), 2600);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
 
   const checkNear = (x: number, z: number) => {
     chatPos.current.x = x;
@@ -191,7 +177,7 @@ function World() {
       {showMap && (
         <Canvas
           dpr={[1, 1.5]}
-          camera={{ position: [36, 38, 36], fov: 32 }}
+          camera={{ position: [465, 460, 444], fov: 32 }}
           style={{ cursor: "grab", touchAction: "none" }}
           onPointerMissed={() => {
             document.body.style.cursor = "";
@@ -368,7 +354,6 @@ function World() {
           ⌨
         </button>
       )}
-      <EntryTransition phase={phase} />
     </div>
   );
 }

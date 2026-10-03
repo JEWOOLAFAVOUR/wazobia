@@ -5,6 +5,8 @@
 // Local frame: x in [-w/2, w/2], z in [-d/2, d/2], front (door side) at +z.
 // Colliders + spots are derived from the same local specs as the visuals.
 
+import type { ThreeEvent } from "@react-three/fiber";
+import type * as THREE from "three";
 import type { Plot } from "./layout";
 import { yawOfPlot } from "./interiorLayout";
 
@@ -19,11 +21,38 @@ export function InteriorGroup({ plot, children }: { plot: Plot; children: React.
   );
 }
 
-function Slab({ w, d, color = "#b8a88e" }: { w: number; d: number; color?: string }) {
+function Slab({
+  w,
+  d,
+  color = "#b8a88e",
+  floorMap,
+  onFloorClick,
+}: {
+  w: number;
+  d: number;
+  color?: string;
+  floorMap?: THREE.Texture;
+  onFloorClick?: (x: number, z: number) => void;
+}) {
+  const map = floorMap?.clone();
+  if (map) {
+    // One texture repeat per ~3.2m so tiles read at a believable scale.
+    map.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(d / 3.2)));
+    map.needsUpdate = true;
+  }
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]} receiveShadow>
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0.06, 0]}
+      receiveShadow
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        if (!onFloorClick) return;
+        e.stopPropagation();
+        onFloorClick(e.point.x, e.point.z);
+      }}
+    >
       <planeGeometry args={[w, d]} />
-      <meshStandardMaterial color={color} roughness={1} />
+      <meshStandardMaterial color={color} roughness={0.85} map={map ?? undefined} />
     </mesh>
   );
 }

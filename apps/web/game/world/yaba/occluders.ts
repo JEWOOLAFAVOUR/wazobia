@@ -16,12 +16,6 @@ function flat(b: Box, y0: number, y1: number): Occluder {
   return { minX: b.x - b.hx, minY: y0, minZ: b.z - b.hz, maxX: b.x + b.hx, maxY: y1, maxZ: b.z + b.hz };
 }
 
-function plotWallHeight(plotId: string, fallback: number): number {
-  const p = PLOTS.find((x) => x.id === plotId);
-  if (!p) return fallback;
-  return p.enterable ? ENTERABLE_WALL_H : p.height;
-}
-
 /** Roof/cap slab so a high camera stays above the roof instead of seeing through it. */
 function roofSlab(plotId: string, cx: number, cz: number, w: number, d: number, wallH: number): Occluder {
   return {
@@ -85,11 +79,14 @@ export function streetOccluders(): Occluder[] {
   return out;
 }
 
-/** Home-interior occluders for the recentered flat. */
-export function homeOccluders(): Occluder[] {
+/** Home-interior occluders for the recentered flat. Roofless by default so a
+ *  top-down camera can see the room (matches PlotShell roof={false}). */
+export function homeOccluders(opts?: { roof?: boolean }): Occluder[] {
   const out: Occluder[] = [];
   for (const b of wallBoxes(HOME_PLOT)) out.push(flat(b, 0, ENTERABLE_WALL_H));
-  out.push(roofSlab(HOME_PLOT.id, HOME_PLOT.x, HOME_PLOT.z, HOME_PLOT.w, HOME_PLOT.d, ENTERABLE_WALL_H));
+  if (opts?.roof ?? false) {
+    out.push(roofSlab(HOME_PLOT.id, HOME_PLOT.x, HOME_PLOT.z, HOME_PLOT.w, HOME_PLOT.d, ENTERABLE_WALL_H));
+  }
   out.push(...furniture(HOME_PLOT, { w: HOME_PLOT.w - 0.7, d: HOME_PLOT.d - 0.7, interior: "apartment" }));
   return out;
 }
