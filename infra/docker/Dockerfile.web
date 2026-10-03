@@ -3,6 +3,12 @@ WORKDIR /app
 COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm install
 COPY apps/web/ .
+# NEXT_PUBLIC_* are baked into the client bundle at build time,
+# so they must arrive as build args (compose runtime env is too late).
+ARG NEXT_PUBLIC_API_URL=http://localhost:8081
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:8081/ws
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 RUN npm run build
 
 FROM node:22-alpine
