@@ -8,7 +8,6 @@ import { Danfo } from "./parts";
 
 type Point = { x: number; z: number; pause?: number };
 type WalkerRoute = { start: Point; points: Point[]; speed: number; shirt: string; trousers: string };
-const MAP_ACTIVITY_CENTER = new THREE.Vector3(0, 0, 0);
 
 const WALKERS: WalkerRoute[] = [
   {
@@ -76,13 +75,13 @@ function AmbientPedestrian({ route, id, player, mapView = false }: { route: Walk
   useFrame((_, rawDt) => {
     const root = body.current;
     if (!root) return;
-    if (mapView && camera.position.distanceToSquared(MAP_ACTIVITY_CENTER) > 190 * 190) {
+    if (mapView && camera.position.y > 900) {
       root.visible = false;
       return;
     }
     const dxPlayer = root.position.x - player.current.x;
     const dzPlayer = root.position.z - player.current.z;
-    if (dxPlayer * dxPlayer + dzPlayer * dzPlayer > 105 * 105) {
+    if (!mapView && dxPlayer * dxPlayer + dzPlayer * dzPlayer > 105 * 105) {
       root.visible = false;
       return;
     }
@@ -185,12 +184,14 @@ function AmbientDanfo({ player, mapView = false }: { player: React.MutableRefObj
   useFrame((_, rawDt) => {
     const group = vehicle.current;
     if (!group) return;
-    if (mapView && camera.position.distanceToSquared(MAP_ACTIVITY_CENTER) > 190 * 190) {
+    if (mapView && camera.position.y > 900) {
       group.visible = false;
       return;
     }
     const dt = Math.min(rawDt, 0.05);
-    const active = Math.hypot(group.position.x - player.current.x, group.position.z - player.current.z) < 125;
+    const active = mapView
+      ? camera.position.y <= 900
+      : Math.hypot(group.position.x - player.current.x, group.position.z - player.current.z) < 125;
     group.visible = active;
     if (!active) return;
 
@@ -236,11 +237,13 @@ function AmbientTaxi({ player, mapView = false }: { player: React.MutableRefObje
   useFrame((_, rawDt) => {
     const group = vehicle.current;
     if (!group) return;
-    if (mapView && camera.position.distanceToSquared(MAP_ACTIVITY_CENTER) > 190 * 190) {
+    if (mapView && camera.position.y > 900) {
       group.visible = false;
       return;
     }
-    const active = Math.hypot(group.position.x - player.current.x, group.position.z - player.current.z) < 125;
+    const active = mapView
+      ? camera.position.y <= 900
+      : Math.hypot(group.position.x - player.current.x, group.position.z - player.current.z) < 125;
     group.visible = active;
     if (!active) return;
 

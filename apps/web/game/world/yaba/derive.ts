@@ -12,7 +12,7 @@ export type Door = {
   id: string;
   plotId: string;
   name: string;
-  interior: "restaurant" | "shop" | "apartment";
+  interior: "restaurant" | "shop" | "apartment" | "office";
   /** centre of the doorway, on the front face */
   x: number;
   z: number;

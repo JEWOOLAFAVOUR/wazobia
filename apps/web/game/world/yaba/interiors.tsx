@@ -5,8 +5,8 @@
 // Local frame: x in [-w/2, w/2], z in [-d/2, d/2], front (door side) at +z.
 // Colliders + spots are derived from the same local specs as the visuals.
 
-import { useRef } from "react";
-import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { useEffect, useMemo } from "react";
+import { type ThreeEvent } from "@react-three/fiber";
 import type * as THREE from "three";
 import type { Plot } from "./layout";
 import { yawOfPlot } from "./interiorLayout";
@@ -39,20 +39,28 @@ function Slab({
 }) {
   // One texture block (4 tiles) per ~2.4m → honest 0.6m household tiles at any room size.
   const repeat = { x: Math.max(1, Math.round(w / 2.4)), y: Math.max(1, Math.round(d / 2.4)) };
-  const map = floorMap?.clone();
-  if (map) {
-    map.repeat.set(repeat.x, repeat.y);
-    map.needsUpdate = true;
-  }
-  const rough = floorRoughness?.clone();
-  if (rough) {
-    rough.repeat.set(repeat.x, repeat.y);
-    rough.needsUpdate = true;
-  }
+  const map = useMemo(() => {
+    if (!floorMap) return undefined;
+    const texture = floorMap.clone();
+    texture.repeat.set(repeat.x, repeat.y);
+    texture.needsUpdate = true;
+    return texture;
+  }, [floorMap, repeat.x, repeat.y]);
+  const rough = useMemo(() => {
+    if (!floorRoughness) return undefined;
+    const texture = floorRoughness.clone();
+    texture.repeat.set(repeat.x, repeat.y);
+    texture.needsUpdate = true;
+    return texture;
+  }, [floorRoughness, repeat.x, repeat.y]);
+  useEffect(() => () => {
+    map?.dispose();
+    rough?.dispose();
+  }, [map, rough]);
   return (
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, 0.06, 0]}
+      position={[0, 0.012, 0]}
       receiveShadow
       onClick={(e: ThreeEvent<MouseEvent>) => {
         if (!onFloorClick) return;
@@ -61,7 +69,7 @@ function Slab({
       }}
     >
       <planeGeometry args={[w, d]} />
-      <meshStandardMaterial color={color} roughness={0.9} map={map ?? undefined} roughnessMap={rough ?? undefined} />
+      <meshStandardMaterial color={color} roughness={0.9} map={map} roughnessMap={rough} />
     </mesh>
   );
 }
@@ -133,12 +141,20 @@ function Counter({ x, z, w = 4, color = "#8a5a2e" }: { x: number; z: number; w?:
   );
 }
 
-export function RestaurantInterior({ plot }: { plot: Plot }) {
+export function RestaurantInterior({
+  plot,
+  floorMap,
+  floorRoughness,
+}: {
+  plot: Plot;
+  floorMap?: THREE.Texture;
+  floorRoughness?: THREE.Texture;
+}) {
   const w = plot.w - 0.7;
   const d = plot.d - 0.7;
   return (
     <InteriorGroup plot={plot}>
-      <Slab w={w} d={d} color="#c9b896" />
+      <Slab w={w} d={d} color={floorMap ? "#ffffff" : "#c9b896"} floorMap={floorMap} floorRoughness={floorRoughness} />
       {/* kitchen pass at the back */}
       <mesh position={[0, 1.3, -d / 2 + 0.2]}>
         <boxGeometry args={[3.2, 1.4, 0.1]} />
@@ -174,12 +190,20 @@ export function RestaurantInterior({ plot }: { plot: Plot }) {
   );
 }
 
-export function ShopInterior({ plot }: { plot: Plot }) {
+export function ShopInterior({
+  plot,
+  floorMap,
+  floorRoughness,
+}: {
+  plot: Plot;
+  floorMap?: THREE.Texture;
+  floorRoughness?: THREE.Texture;
+}) {
   const w = plot.w - 0.7;
   const d = plot.d - 0.7;
   return (
     <InteriorGroup plot={plot}>
-      <Slab w={w} d={d} color="#b5ab98" />
+      <Slab w={w} d={d} color={floorMap ? "#ffffff" : "#b5ab98"} floorMap={floorMap} floorRoughness={floorRoughness} />
       <ShelfUnit x={-1.4} z={-0.6} />
       <ShelfUnit x={1.4} z={-0.6} goods={["#274b73", "#d9a62e", "#5b3a75"]} />
       <ShelfUnit x={0} z={-d / 2 + 0.9} goods={["#a83a32", "#eceae6", "#2e6b46"]} />
@@ -201,6 +225,86 @@ export function ShopInterior({ plot }: { plot: Plot }) {
           <meshStandardMaterial color="#9fd8ff" emissive="#7cc4ff" emissiveIntensity={0.7} />
         </mesh>
       </group>
+    </InteriorGroup>
+  );
+}
+
+function OfficeDesk({ x, z, color }: { x: number; z: number; color: string }) {
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 0.76, 0]} castShadow>
+        <boxGeometry args={[1.9, 0.12, 0.9]} />
+        <meshStandardMaterial color={color} roughness={0.72} />
+      </mesh>
+      {[-0.78, 0.78].map((dx) => (
+        <mesh key={dx} position={[dx, 0.37, 0]}>
+          <boxGeometry args={[0.08, 0.72, 0.72]} />
+          <meshStandardMaterial color="#393d40" roughness={0.8} />
+        </mesh>
+      ))}
+      <mesh position={[0, 1.12, -0.15]} castShadow>
+        <boxGeometry args={[0.72, 0.5, 0.06]} />
+        <meshStandardMaterial color="#202a32" roughness={0.35} />
+      </mesh>
+      <mesh position={[0, 0.89, -0.13]}>
+        <boxGeometry args={[0.82, 0.035, 0.46]} />
+        <meshStandardMaterial color="#b9c9cf" roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Compact, walkable CcHUB-style coworking floor with reception and shared desks. */
+export function OfficeInterior({
+  plot,
+  floorMap,
+  floorRoughness,
+}: {
+  plot: Plot;
+  floorMap?: THREE.Texture;
+  floorRoughness?: THREE.Texture;
+}) {
+  const w = plot.w - 0.7;
+  const d = plot.d - 0.7;
+  return (
+    <InteriorGroup plot={plot}>
+      <Slab w={w} d={d} color={floorMap ? "#ffffff" : "#d0c7b5"} floorMap={floorMap} floorRoughness={floorRoughness} />
+      <mesh position={[0, 2.35, -d / 2 + 0.18]}>
+        <boxGeometry args={[3.6, 0.55, 0.12]} />
+        <meshStandardMaterial color="#213e48" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 2.35, -d / 2 + 0.1]}>
+        <boxGeometry args={[2.2, 0.2, 0.04]} />
+        <meshStandardMaterial color="#9bd8c4" emissive="#3b8c74" emissiveIntensity={0.35} />
+      </mesh>
+      <Counter x={0} z={-d / 2 + 1.0} w={3.6} color="#76563e" />
+      <OfficeDesk x={-2.35} z={-0.45} color="#b8875b" />
+      <OfficeDesk x={2.35} z={-0.45} color="#9c7655" />
+      <TableSet x={0} z={1.3} color="#354a55" />
+      {[[-3.8, 2.2], [3.8, 2.2]].map(([x, z], i) => (
+        <group key={i} position={[x, 0, z]}>
+          <mesh position={[0, 0.55, 0]} castShadow>
+            <cylinderGeometry args={[0.42, 0.5, 1.1, 10]} />
+            <meshStandardMaterial color="#b8a88e" roughness={0.95} />
+          </mesh>
+          <mesh position={[0, 1.35, 0]}>
+            <sphereGeometry args={[0.55, 10, 8]} />
+            <meshStandardMaterial color="#3d7654" roughness={0.95} />
+          </mesh>
+        </group>
+      ))}
+      {[-2.2, 0, 2.2].map((x) => (
+        <group key={x} position={[x, 0, 0.2]}>
+          <mesh position={[0, 3.0, 0]}>
+            <cylinderGeometry args={[0.025, 0.025, 0.65, 6]} />
+            <meshStandardMaterial color="#393d40" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 2.65, 0]}>
+            <sphereGeometry args={[0.13, 10, 8]} />
+            <meshStandardMaterial color="#f5dfa7" emissive="#e8b04b" emissiveIntensity={0.55} />
+          </mesh>
+        </group>
+      ))}
     </InteriorGroup>
   );
 }
@@ -296,36 +400,6 @@ function ArtFrame({ x, y, z, c1, c2 }: { x: number; y: number; z: number; c1: st
 }
 
 /** Slow ceiling fan — the room's one animated fixture. */
-function CeilingFan({ x, z }: { x: number; z: number }) {
-  const blades = useRef<THREE.Group>(null);
-  useFrame((_, rawDt) => {
-    if (blades.current) blades.current.rotation.y += Math.min(rawDt, 0.05) * 2.4;
-  });
-  return (
-    <group position={[x, 0, z]}>
-      <mesh position={[0, 3.35, 0]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.5, 8]} />
-        <meshStandardMaterial color="#2a2725" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 3.06, 0]}>
-        <sphereGeometry args={[0.12, 10, 10]} />
-        <meshStandardMaterial color="#3d3a45" roughness={0.6} />
-      </mesh>
-      <group ref={blades} position={[0, 3.0, 0]}>
-        {[0, 1, 2, 3].map((i) => {
-          const a = (i * Math.PI) / 2;
-          return (
-            <mesh key={i} position={[Math.cos(a) * 0.72, 0, Math.sin(a) * 0.72]} rotation={[0, -a, 0]}>
-              <boxGeometry args={[1.25, 0.035, 0.2]} />
-              <meshStandardMaterial color="#5a4a33" roughness={0.8} />
-            </mesh>
-          );
-        })}
-      </group>
-    </group>
-  );
-}
-
 export function ApartmentInterior({
   plot,
   floorMap,
@@ -391,7 +465,6 @@ export function ApartmentInterior({
       <Plant x={5.0} z={4.5} />
       <ArtFrame x={-3.5} y={1.9} z={-d / 2 + 0.36} c1="#e8d5a8" c2="#a83a32" />
       <ArtFrame x={4.3} y={1.9} z={-d / 2 + 0.36} c1="#274b73" c2="#d9a62e" />
-      <CeilingFan x={0} z={0.5} />
       {/* kitchen corner */}
       <Counter x={-w / 2 + 1.6} z={-d / 2 + 1.1} w={3.2} color="#6f6a60" />
       {[-0.8, 0, 0.8].map((dx, i) => (

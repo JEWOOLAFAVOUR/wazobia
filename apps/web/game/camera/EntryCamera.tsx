@@ -23,6 +23,7 @@ export default function EntryCamera({
   maxPitch = 1.1,
   initialDist = 7,
   initialPitch = 0.42,
+  maxDist = 11,
 }: {
   posRef: React.MutableRefObject<EntryPos>;
   occluders?: Occluder[];
@@ -31,6 +32,7 @@ export default function EntryCamera({
   /** Per-scene framing: home uses a pulled-back isometric-style default. */
   initialDist?: number;
   initialPitch?: number;
+  maxDist?: number;
 }) {
   const { camera, gl } = useThree();
   const look = useRef(new THREE.Vector3());
@@ -87,7 +89,7 @@ export default function EntryCamera({
       // Trackpads fire wheel with large deltas (and ctrlKey for pinch) — normalize so zoom doesn't jump.
       const unit = e.deltaMode === 1 ? 16 : 1;
       const step = e.ctrlKey ? 0.02 : 0.004;
-      orbit.current.dist = Math.max(4, Math.min(11, orbit.current.dist + e.deltaY * unit * step));
+      orbit.current.dist = Math.max(4, Math.min(maxDist, orbit.current.dist + e.deltaY * unit * step));
     };
     el.addEventListener("pointerdown", down);
     window.addEventListener("pointermove", move);
@@ -99,7 +101,7 @@ export default function EntryCamera({
       window.removeEventListener("pointerup", up);
       el.removeEventListener("wheel", wheel);
     };
-  }, [gl]);
+  }, [gl, maxDist]);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);

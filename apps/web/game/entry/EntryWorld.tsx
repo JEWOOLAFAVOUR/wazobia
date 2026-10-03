@@ -14,13 +14,14 @@ import VenueLabels from "@/game/entry/VenueLabels";
 import BuySheet from "@/game/entry/BuySheet";
 import PhoneSheet from "@/game/entry/PhoneSheet";
 import HomeWorld from "@/game/entry/HomeWorld";
+import TaxiRide from "@/game/entry/TaxiRide";
 import YabaHood, { HOOD, plotAtPoint } from "@/game/world/yaba/Hood";
 import { PLOTS, SPAWN } from "@/game/world/yaba/layout";
 import { streetOccluders } from "@/game/world/yaba/occluders";
 import { HOME_SPAWN, LOCATIONS, navigateToLocation, type WorldLocation } from "@/game/navigation/locations";
 import EntryPlayer, { type EntryPos } from "@/game/player/EntryPlayer";
 import EntryCamera from "@/game/camera/EntryCamera";
-import { CITY_CENTER, LagosMapBlocks, MapCamera, type MapFocus } from "@/game/entry/LagosMap";
+import { LagosMapBlocks, MapCamera } from "@/game/entry/LagosMap";
 import AmbientLife from "@/game/world/yaba/AmbientLife";
 import type { Interactable } from "@/game/world/YabaBlock";
 
@@ -86,11 +87,11 @@ function World() {
   const [homeSpawn, setHomeSpawn] = useState<EntryPos>({ ...HOME_SPAWN });
   const [showPlaces, setShowPlaces] = useState(false);
   const occluders = useMemo(() => streetOccluders(), []);
-  const mapFocus = useRef<MapFocus>({ ...CITY_CENTER });
   const [near, setNear] = useState<Interactable | null>(null);
   const [insideId, setInsideId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
+  const [taxiRide, setTaxiRide] = useState<{ from: EntryPos; destination: WorldLocation; arrival: EntryPos } | null>(null);
   const [tick, setTick] = useState(0);
   const bump = () => setTick((t) => t + 1);
 
@@ -139,13 +140,38 @@ function World() {
 
   const pickVenue = (plotId: string) => {
     const p = PLOTS.find((x) => x.id === plotId);
-    if (p) mapFocus.current = { x: p.x, z: p.z };
     setPickedId(plotId);
     say(`${p?.name ?? plotId} — tap Walk street to go there.`);
   };
 
-  /** Single teleport path: every Home/map button funnels through here. */
+  const startTaxiRide = (destination: WorldLocation) => {
+    const homeDoor = navigateToLocation("apt-1");
+    if (!homeDoor) {
+      say("Couldn't find the apartment entrance for this ride.");
+      return;
+    }
+    const from = { x: homeDoor.x, z: homeDoor.z, heading: homeDoor.heading };
+    const arrival = {
+      x: destination.x + Math.sin(destination.heading) * 3,
+      z: destination.z + Math.cos(destination.heading) * 3,
+      heading: destination.heading,
+    };
+    streetPos.current = from;
+    setNear(null);
+    setInsideId(null);
+    setStreetSpawn(from);
+    setTaxiRide({ from, destination, arrival });
+    setTab("live");
+    setShowPlaces(false);
+    say(`Your cab is taking you to ${destination.label}.`, 5000);
+  };
+
+  /** Single location path: home CcHUB trips use a visible cab ride. */
   const goToLocation = (loc: WorldLocation) => {
+    if (loc.id === "office-1" && tab === "home") {
+      startTaxiRide(loc);
+      return;
+    }
     if (loc.areaId === "home-interior") {
       setHomeSpawn({ x: loc.x, z: loc.z, heading: loc.heading });
       setTab("home");
@@ -162,7 +188,6 @@ function World() {
   const walkTo = (plotId: string) => {
     const loc = navigateToLocation(plotId);
     if (loc) {
-      if (loc.areaId === "yaba-street") mapFocus.current = { x: loc.x, z: loc.z };
       goToLocation(loc);
       return;
     }
@@ -195,10 +220,10 @@ function World() {
         <hemisphereLight args={["#e8f4ff", "#4a5a48", 0.6]} />
         <directionalLight position={[24, 30, 12]} intensity={1.4} color="#fff2d9" />
         <Suspense fallback={null}>
-          <LagosMapBlocks onPick={pickVenue} />
+          <LagosMapBlocks onPick={pickVenue} labelsVisible={showMap} />
           <AmbientLife player={streetPos} mapView />
         </Suspense>
-        <MapCamera focusRef={mapFocus} />
+        <MapCamera />
       </Canvas>
       <Canvas
         shadows
@@ -222,15 +247,29 @@ function World() {
         <Suspense fallback={null}>
           <YabaHood insideId={insideId} />
           <VenueLabels />
-          <EntryPlayer
-            key={`${streetSpawn.x}:${streetSpawn.z}`}
-            avatar={avatar}
-            initial={streetSpawn}
-            posRef={streetPos}
-            colliders={HOOD.colliders}
-            onMove={checkNear}
-            onInteractKey={interact}
-          />
+          {taxiRide ? (
+            <TaxiRide
+              from={taxiRide.from}
+              to={taxiRide.destination}
+              posRef={streetPos}
+              onArrive={() => {
+                streetPos.current = taxiRide.arrival;
+                setStreetSpawn(taxiRide.arrival);
+                setTaxiRide(null);
+                say(`Arrived at ${taxiRide.destination.label}. You're inside.`);
+              }}
+            />
+          ) : (
+            <EntryPlayer
+              key={`${streetSpawn.x}:${streetSpawn.z}`}
+              avatar={avatar}
+              initial={streetSpawn}
+              posRef={streetPos}
+              colliders={HOOD.colliders}
+              onMove={checkNear}
+              onInteractKey={interact}
+            />
+          )}
           <AmbientLife player={streetPos} />
         </Suspense>
         <EntryCamera posRef={streetPos} occluders={occluders} />
@@ -298,7 +337,12 @@ function World() {
                 Drag to pan · scroll to zoom · click a block · double-click to walk there
               </div>
             )}
-            {showStreet && !near && (
+            {showStreet && taxiRide && (
+              <div className="bg-slate-900/85 text-white rounded-full px-4 py-1.5 text-xs shadow">
+                Riding to {taxiRide.destination.label} · watch the road
+              </div>
+            )}
+            {showStreet && !taxiRide && !near && (
               <div className="bg-white/90 rounded-full px-4 py-1.5 text-xs text-slate-600 shadow">Walk to a glowing doorway to step inside · WASD / joystick</div>
             )}
             {showStreet && near && (
@@ -348,7 +392,7 @@ function World() {
             ⌃ Clean screen
           </button>
 
-          {showStreet && <TouchPad />}
+          {showStreet && !taxiRide && <TouchPad />}
 
           {/* venue walk shortcut */}
           {showMap && pickedId && (

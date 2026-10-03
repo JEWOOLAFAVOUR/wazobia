@@ -31,7 +31,7 @@ export function localBoxToWorld(p: Plot, b: LocalBox): Box {
 }
 
 /** Interior furniture colliders, derived alongside the visuals. */
-export function interiorColliders(p: { w: number; d: number; interior: "restaurant" | "shop" | "apartment" }): LocalBox[] {
+export function interiorColliders(p: { w: number; d: number; interior: "restaurant" | "shop" | "apartment" | "office" }): LocalBox[] {
   if (p.interior === "restaurant") {
     return [
       { x: 0, z: -p.d / 2 + 1.6, hx: 2.2, hz: 0.4 },
@@ -50,6 +50,16 @@ export function interiorColliders(p: { w: number; d: number; interior: "restaura
       { x: w / 2 - 0.6, z: -d / 2 + 0.9, hx: 0.5, hz: 0.4 },
     ];
   }
+  if (p.interior === "office") {
+    return [
+      { x: 0, z: -p.d / 2 + 1.0, hx: 1.8, hz: 0.45 },
+      { x: -2.4, z: -0.5, hx: 1.0, hz: 0.55 },
+      { x: 2.4, z: -0.5, hx: 1.0, hz: 0.55 },
+      { x: 0, z: 1.3, hx: 1.0, hz: 0.6 },
+      { x: -3.8, z: 2.2, hx: 0.45, hz: 0.45 },
+      { x: 3.8, z: 2.2, hx: 0.45, hz: 0.45 },
+    ];
+  }
   return [
     { x: 1.5, z: -2.4, hx: 3.6, hz: 0.09 },
     { x: 4.45, z: 2.6, hx: 1.55, hz: 0.09 },
@@ -64,7 +74,7 @@ export function interiorColliders(p: { w: number; d: number; interior: "restaura
   ];
 }
 
-export function interiorSpots(kind: "restaurant" | "shop" | "apartment"): LocalSpot[] {
+export function interiorSpots(kind: "restaurant" | "shop" | "apartment" | "office"): LocalSpot[] {
   if (kind === "restaurant") {
     return [
       { id: "spot-counter", title: "Mama Put counter", detail: "Jollof ₦2,500 · Chicken ₦4,000 · Ordering opens soon.", x: 0, z: -1.4, radius: 2.4 },
@@ -75,6 +85,13 @@ export function interiorSpots(kind: "restaurant" | "shop" | "apartment"): LocalS
     return [
       { id: "spot-shelf", title: "Provision shelves", detail: "Rice, Indomie, Milo, detergent — restocking daily.", x: 0, z: -0.6, radius: 2.4 },
       { id: "spot-fridge", title: "Cold drinks", detail: "Chilled water and soft drinks.", x: 2.4, z: -2.6, radius: 2.2 },
+    ];
+  }
+  if (kind === "office") {
+    return [
+      { id: "spot-reception", title: "CcHUB reception", detail: "Welcome to the innovation hub.", x: 0, z: -3.2, radius: 2.2 },
+      { id: "spot-workspace", title: "Co-working desks", detail: "A shared space for Lagos builders.", x: 0, z: -0.5, radius: 2.4 },
+      { id: "spot-meeting", title: "Meeting corner", detail: "Ideas and collaborations happen here.", x: 0, z: 2.1, radius: 2.2 },
     ];
   }
   return [

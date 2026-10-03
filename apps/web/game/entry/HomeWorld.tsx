@@ -50,6 +50,12 @@ export default function HomeWorld({
       if (markerTimer.current) clearTimeout(markerTimer.current);
     };
   }, []);
+  useEffect(() => {
+    return () => {
+      floorMaps?.map.dispose();
+      floorMaps?.roughnessMap.dispose();
+    };
+  }, [floorMaps]);
 
   const { colliders, spots } = useMemo(() => {
     const colliders: Box[] = wallBoxes(APT).map((b) => ({ x: b.x, z: b.z, hx: b.hx, hz: b.hz }));
@@ -200,7 +206,7 @@ export default function HomeWorld({
             onTargetDone={() => setMarker(null)}
           />
         </Suspense>
-        <EntryCamera posRef={posRef} occluders={occluders} maxPitch={1.4} initialDist={9} initialPitch={0.6} />
+        <EntryCamera posRef={posRef} occluders={occluders} maxPitch={1.4} initialDist={12} initialPitch={0.95} maxDist={14} />
       </Canvas>
       {near && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-24 bg-white/95 rounded-full px-4 py-2 text-xs text-slate-700 shadow">

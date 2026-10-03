@@ -34,9 +34,10 @@ const FURNITURE_H: Record<string, number[]> = {
   restaurant: [1.2, 0.8, 0.8],
   shop: [1.6, 1.6, 1.6, 1.2, 2.0],
   apartment: [2.7, 2.7, 1.1, 1.4, 0.75, 2.0, 1.2, 1.8, 1.2, 0.5],
+  office: [1.2, 0.85, 0.85, 0.9, 1.1, 1.1],
 };
 
-function furniture(plot: Plot, dims: { w: number; d: number; interior: "restaurant" | "shop" | "apartment" }): Occluder[] {
+function furniture(plot: Plot, dims: { w: number; d: number; interior: "restaurant" | "shop" | "apartment" | "office" }): Occluder[] {
   const boxes = interiorColliders(dims);
   const heights = FURNITURE_H[dims.interior] ?? [];
   return boxes.map((b, i) => flat(localBoxToWorld(plot, b), 0, heights[i] ?? 1.2));
@@ -70,7 +71,7 @@ export function streetOccluders(): Occluder[] {
   for (const p of PLOTS) {
     const h = p.enterable ? ENTERABLE_WALL_H : p.height;
     for (const b of wallBoxes(p)) out.push(flat(b, 0, h));
-    out.push(roofSlab(p.id, p.x, p.z, p.w, p.d, h));
+    if (!p.enterable) out.push(roofSlab(p.id, p.x, p.z, p.w, p.d, h));
     if (p.enterable && p.interior) {
       out.push(...furniture(p, { w: p.w - 0.7, d: p.d - 0.7, interior: p.interior }));
     }

@@ -5,7 +5,7 @@
 // what you see is what you collide with. Interiors are built in place inside
 // their footprints: street → door gap → interior → door → same street.
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Box } from "@/lib/collision";
@@ -20,8 +20,9 @@ import {
   type Plot,
 } from "./layout";
 import { BUILDING_COLLIDERS, DOOR_INTERACTABLES, streetPieces, wallBoxes } from "./derive";
-import { ApartmentInterior, RestaurantInterior, ShopInterior, interiorColliders, interiorSpots, localBoxToWorld, localToWorld } from "./interiors";
+import { ApartmentInterior, OfficeInterior, RestaurantInterior, ShopInterior, interiorColliders, interiorSpots, localBoxToWorld, localToWorld } from "./interiors";
 import { yawOfPlot } from "./interiorLayout";
+import { makeTileMaps } from "./floorTexture";
 import { Sign, StreetTree, UtilityPole } from "./parts";
 import type { Interactable } from "../YabaBlock";
 
@@ -260,18 +261,12 @@ export function PlotShell({ plot, ghost, roof = true }: { plot: Plot; ghost: boo
           <meshStandardMaterial color={color} roughness={0.95} />
         </mesh>
       ))}
-      {roof &&
-        (plot.enterable ? (
-          <mesh position={[plot.x, wallH + 0.18, plot.z]}>
-            <boxGeometry args={[plot.w + 0.3, 0.36, plot.d + 0.3]} />
-            <meshStandardMaterial color="#3a3733" roughness={1} />
-          </mesh>
-        ) : (
-          <mesh position={[plot.x, wallH + 0.15, plot.z]} castShadow>
-            <boxGeometry args={[plot.w + 0.4, 0.3, plot.d + 0.4]} />
-            <meshStandardMaterial color="#4a4239" roughness={1} />
-          </mesh>
-        ))}
+      {roof && !plot.enterable && (
+        <mesh position={[plot.x, wallH + 0.15, plot.z]} castShadow>
+          <boxGeometry args={[plot.w + 0.4, 0.3, plot.d + 0.4]} />
+          <meshStandardMaterial color="#4a4239" roughness={1} />
+        </mesh>
+      )}
       {/* finished trim in plot-local frame (front = door side) */}
       <group position={[plot.x, 0, plot.z]} rotation={[0, yawOfPlot(plot), 0]}>
         <FacadeDetails plot={plot} wallH={wallH} ghost={ghost} />
@@ -446,6 +441,13 @@ function Landmark({ plot }: { plot: Plot }) {
 
 export default function YabaHood({ insideId }: { insideId: string | null }) {
   const pieces = streetPieces();
+  const floorMaps = useMemo(() => makeTileMaps(), []);
+  useEffect(() => {
+    return () => {
+      floorMaps.map.dispose();
+      floorMaps.roughnessMap.dispose();
+    };
+  }, [floorMaps]);
   return (
     <group>
       <Ground />
@@ -463,9 +465,10 @@ export default function YabaHood({ insideId }: { insideId: string | null }) {
       {PLOTS.map((p) => (
         <group key={p.id}>
           <PlotShell plot={p} ghost={insideId === p.id} />
-          {p.id === "rest-1" && <RestaurantInterior plot={p} />}
-          {p.id === "shop-1" && <ShopInterior plot={p} />}
-          {p.id === "apt-1" && <ApartmentInterior plot={p} />}
+          {p.id === "rest-1" && <RestaurantInterior plot={p} floorMap={floorMaps.map} floorRoughness={floorMaps.roughnessMap} />}
+          {p.id === "shop-1" && <ShopInterior plot={p} floorMap={floorMaps.map} floorRoughness={floorMaps.roughnessMap} />}
+          {p.id === "apt-1" && <ApartmentInterior plot={p} floorMap={floorMaps.map} floorRoughness={floorMaps.roughnessMap} />}
+          {p.id === "office-1" && <OfficeInterior plot={p} floorMap={floorMaps.map} floorRoughness={floorMaps.roughnessMap} />}
           {p.id === "house-1" && <CompoundWalls plot={p} />}
           <Landmark plot={p} />
         </group>

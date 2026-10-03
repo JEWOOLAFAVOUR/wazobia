@@ -44,7 +44,7 @@ export type Plot = {
   /** false = decorative landmark, not enterable */
   enterable: boolean;
   /** interior template id, when enterable */
-  interior?: "restaurant" | "shop" | "apartment";
+  interior?: "restaurant" | "shop" | "apartment" | "office";
 };
 
 export const SIDEWALK_W = 2.4;
@@ -96,7 +96,7 @@ export const PLOTS: Plot[] = [
   { id: "apt-1", kind: "apartment", name: "Sunrise Flats", x: -29, z: -(MAIN + 6), w: 13, d: 12, height: 9.4, facing: "+z", enterable: true, interior: "apartment" },
 
   // South side of the main street, west (block D)
-  { id: "office-1", kind: "office", name: "Yaba Business Centre", x: -14, z: MAIN + 5, w: 10.5, d: 10, height: 8.5, facing: "-z", enterable: false },
+  { id: "office-1", kind: "office", name: "CcHUB Lagos", x: -14, z: MAIN + 5, w: 10.5, d: 10, height: 8.5, facing: "-z", enterable: true, interior: "office" },
   { id: "bank-1", kind: "bank", name: "Wazobia Microfinance", x: -28, z: MAIN + 5, w: 10, d: 10, height: 7.2, facing: "-z", enterable: false },
 
   // South side, east (block E)

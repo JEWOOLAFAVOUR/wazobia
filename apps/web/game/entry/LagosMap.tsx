@@ -1,19 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html, MapControls } from "@react-three/drei";
 import * as THREE from "three";
 import { PLOTS, ROADS, type RoadSpec } from "@/game/world/yaba/layout";
 import { Danfo } from "@/game/world/yaba/parts";
 
-export type MapFocus = { x: number; z: number };
-
-const CITY_BOUNDS = { minX: -266, maxX: 370, minZ: -141, maxZ: 340 };
-export const CITY_CENTER = {
+const CITY_BOUNDS = { minX: -266, maxX: 480, minZ: -141, maxZ: 340 };
+const CITY_CAMERA_DIRECTION = new THREE.Vector3(0.55, 0.65, 0.55).normalize();
+const CITY_CENTER = {
   x: (CITY_BOUNDS.minX + CITY_BOUNDS.maxX) / 2,
   z: (CITY_BOUNDS.minZ + CITY_BOUNDS.maxZ) / 2,
 };
+
+function cityOverviewDistance(camera: THREE.Camera, width: number, height: number) {
+  const perspectiveCamera = camera as THREE.PerspectiveCamera;
+  const halfFov = THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2;
+  const aspect = width / Math.max(1, height);
+  const diagonalSpan =
+    (CITY_BOUNDS.maxX - CITY_BOUNDS.minX + CITY_BOUNDS.maxZ - CITY_BOUNDS.minZ) / Math.sqrt(2);
+  const verticalSpan = diagonalSpan * Math.cos(Math.atan2(0.65, Math.sqrt(2) * 0.55));
+  return Math.max(
+    diagonalSpan / (2 * Math.tan(halfFov) * aspect),
+    verticalSpan / (2 * Math.tan(halfFov)),
+  ) * 0.65;
+}
 
 const KIND_COLOR: Record<string, string> = {
   shop: "#e8b04b",
@@ -32,84 +44,31 @@ const KIND_COLOR: Record<string, string> = {
  * two-finger drag pans on touch. No rotation (map stays north-up like reference).
  * focusRef stays in sync both ways so venue chips can fly the camera.
  */
-export function MapCamera({ focusRef }: { focusRef: React.MutableRefObject<MapFocus> }) {
+export function MapCamera() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controls = useRef<any>(null);
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
-  const goal = useRef(new THREE.Vector3());
-  const lastFocus = useRef({ x: 0, z: 0 });
-  const flying = useRef(false);
-  const userInteracting = useRef(false);
-  const focus = useRef(focusRef);
-  useEffect(() => {
-    focus.current = focusRef;
-  }, [focusRef]);
+  const maxDistance = useMemo(() => cityOverviewDistance(camera, size.width, size.height), [camera, size.width, size.height]);
 
   useLayoutEffect(() => {
-    const target = focusRef.current;
-    const perspectiveCamera = camera as THREE.PerspectiveCamera;
-    const halfFov = THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2;
-    const aspect = size.width / Math.max(1, size.height);
-    const horizontalSpan = (CITY_BOUNDS.maxX - CITY_BOUNDS.minX + CITY_BOUNDS.maxZ - CITY_BOUNDS.minZ) / Math.sqrt(2);
-    const verticalSpan = horizontalSpan * Math.cos(Math.atan2(0.65, Math.sqrt(2) * 0.55));
-    const distance = Math.max(
-      horizontalSpan / (2 * Math.tan(halfFov) * aspect),
-      verticalSpan / (2 * Math.tan(halfFov)),
-    ) * 1.18;
-    goal.current.set(target.x, 0, target.z);
-    lastFocus.current.x = target.x;
-    lastFocus.current.z = target.z;
-    const direction = new THREE.Vector3(0.55, 0.65, 0.55).normalize();
-    camera.position.copy(goal.current).addScaledVector(direction, distance);
-    camera.lookAt(goal.current);
-    controls.current?.target.copy(goal.current);
+    const target = new THREE.Vector3(CITY_CENTER.x, 0, CITY_CENTER.z);
+    camera.position.copy(target).addScaledVector(CITY_CAMERA_DIRECTION, maxDistance);
+    camera.lookAt(target);
+    controls.current?.target.copy(target);
     controls.current?.update();
-  }, [camera, focusRef, size.width, size.height]);
-
-  const onStart = useCallback(() => {
-    userInteracting.current = true;
-    flying.current = false;
-  }, []);
-  const onEnd = useCallback(() => {
-    userInteracting.current = false;
-  }, []);
-
-  useFrame((_, rawDt) => {
-    const c = controls.current as { target: THREE.Vector3 } | null;
-    if (!c) return;
-    const f = focus.current.current;
-    if (userInteracting.current) {
-      flying.current = false;
-    } else if (lastFocus.current.x !== f.x || lastFocus.current.z !== f.z) {
-      goal.current.set(f.x, 0, f.z);
-      flying.current = true;
-    }
-    if (flying.current) {
-      c.target.lerp(goal.current, 1 - Math.exp(-8 * Math.min(rawDt, 0.05)));
-      if (c.target.distanceToSquared(goal.current) < 0.04) {
-        c.target.copy(goal.current);
-        flying.current = false;
-      }
-    }
-    f.x = c.target.x;
-    f.z = c.target.z;
-    lastFocus.current.x = c.target.x;
-    lastFocus.current.z = c.target.z;
-  }, -2);
+  }, [camera, maxDistance]);
 
   return (
     <MapControls
       ref={controls}
       makeDefault
-      onStart={onStart}
-      onEnd={onEnd}
       enableRotate={false}
       enableDamping
       dampingFactor={0.12}
       screenSpacePanning={false}
-      minDistance={18}
-      maxDistance={3000}
+      minDistance={35}
+      maxDistance={maxDistance}
       maxPolarAngle={Math.PI / 3.2}
       mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }}
@@ -156,12 +115,17 @@ const CITY_ROADS: RoadSpec[] = [
   { id: "apapa-dock-road", axis: "x", center: -5, width: 6, from: -255, to: -175, main: false },
   { id: "apapa-west-link", axis: "z", center: -254, width: 7, from: -72, to: 35, main: true },
   { id: "apapa-east-link", axis: "z", center: -190, width: 5, from: -78, to: 34, main: false },
-  { id: "ajah-epe-expressway", axis: "x", center: 174, width: 12, from: 90, to: 340, main: true },
+  { id: "ajah-epe-expressway", axis: "x", center: 174, width: 12, from: 90, to: 470, main: true },
   { id: "ajah-local-north", axis: "x", center: 150, width: 4, from: 270, to: 338, main: false },
   { id: "ajah-local-south", axis: "x", center: 211, width: 4, from: 270, to: 360, main: false },
   { id: "ajah-west", axis: "z", center: 282, width: 6, from: 130, to: 254, main: false },
   { id: "ajah-centre", axis: "z", center: 322, width: 8, from: 141, to: 254, main: true },
-  { id: "ajah-east", axis: "z", center: 364, width: 5, from: 192, to: 228, main: false },
+  { id: "ajah-east", axis: "z", center: 360, width: 5, from: 192, to: 262, main: false },
+  { id: "ibeju-spine", axis: "x", center: 236, width: 9, from: 340, to: 470, main: true },
+  { id: "ibeju-local", axis: "x", center: 205, width: 4, from: 358, to: 380, main: false },
+  { id: "ibeju-harbor-link", axis: "z", center: 449, width: 7, from: 176, to: 250, main: true },
+  { id: "fertilizer-gate", axis: "x", center: 213, width: 5, from: 346, to: 360, main: false },
+  { id: "steel-gate", axis: "x", center: 258, width: 5, from: 356, to: 372, main: false },
 ];
 
 function landGeometry(points: [number, number][]): THREE.ShapeGeometry {
@@ -196,6 +160,14 @@ const LEKKI_GEOMETRY = landGeometry([
   [364, 192], [370, 219], [359, 245], [339, 263], [310, 270], [282, 253],
   [270, 218], [250, 218], [221, 222], [196, 218], [170, 210], [140, 202], [110, 190],
   [91, 174], [84, 151], [81, 125], [79, 108],
+]);
+// Ibeju-Lekki industrial mainland: refinery, port and factory belt east of
+// Sangotedo. Overlaps Lekki slightly and sits 5mm lower to avoid shimmer.
+const IBEJU_GEOMETRY = landGeometry([
+  [340, 158], [380, 152], [420, 150], [455, 152], [478, 160],
+  [482, 190], [480, 230], [478, 260], [478, 288],
+  [454, 282], [450, 280], [414, 280], [410, 282], [380, 286], [355, 288],
+  [348, 240], [344, 200], [340, 170],
 ]);
 
 function RoadStrip({ road, elevation = 0.18 }: { road: RoadSpec; elevation?: number }) {
@@ -243,7 +215,7 @@ function RoadStrip({ road, elevation = 0.18 }: { road: RoadSpec; elevation?: num
   );
 }
 
-type LandmarkKind = "dining" | "office" | "hub" | "nightlife" | "beach" | "event" | "culture" | "nature" | "education" | "retail" | "industrial";
+type LandmarkKind = "dining" | "office" | "hub" | "nightlife" | "beach" | "event" | "culture" | "nature" | "education" | "retail" | "industrial" | "radio";
 type Landmark = {
   name: string;
   district: string;
@@ -263,19 +235,20 @@ const LANDMARKS: Landmark[] = [
   { name: "Korede Spaghetti", district: "Surulere", category: "Street food", kind: "dining", x: -126, z: -28, w: 17, d: 15, h: 6, color: "#e6c092", accent: "#c83d2b" },
   { name: "Korede Spaghetti", district: "Yaba", category: "Restaurant", kind: "dining", x: 41, z: 28, w: 17, d: 15, h: 6, color: "#e8cf9f", accent: "#d54c32" },
   { name: "CcHUB", district: "Yaba", category: "Innovation campus", kind: "hub", x: -38, z: 28, w: 22, d: 19, h: 12, color: "#d7e4e2", accent: "#f07832", featured: true },
-  { name: "UNILAG", district: "Akoka", category: "University", kind: "education", x: -64, z: -110, w: 28, d: 22, h: 15, color: "#dfd4b9", accent: "#3d8062" },
-  { name: "New Afrika Shrine", district: "Ikeja", category: "Live music", kind: "culture", x: 3, z: -119, w: 24, d: 19, h: 9, color: "#c99b64", accent: "#d43e2e", featured: true },
-  { name: "Balmoral Convention Centre", district: "Ikeja", category: "Events", kind: "event", x: 104, z: -112, w: 30, d: 23, h: 10, color: "#d5d7cf", accent: "#b48c52" },
+  { name: "UNILAG", district: "Akoka", category: "University", kind: "education", x: -86, z: -110, w: 28, d: 22, h: 15, color: "#dfd4b9", accent: "#3d8062" },
+  { name: "New Afrika Shrine", district: "Ikeja", category: "Live music", kind: "culture", x: -12, z: -119, w: 24, d: 19, h: 9, color: "#c99b64", accent: "#d43e2e", featured: true },
+  { name: "Wazobia FM Lagos", district: "Ikeja", category: "Radio station", kind: "radio", x: 51, z: -116, w: 25, d: 20, h: 14, color: "#d7d2bd", accent: "#cf4939", featured: true },
+  { name: "Balmoral Convention Centre", district: "Ikeja", category: "Events", kind: "event", x: 124, z: -108, w: 30, d: 23, h: 10, color: "#d5d7cf", accent: "#b48c52" },
   { name: "Freedom Park", district: "Lagos Island", category: "Culture & live music", kind: "culture", x: -93, z: 111, w: 20, d: 18, h: 7, color: "#c4aa81", accent: "#4b7950", featured: true },
-  { name: "RSVP Lagos", district: "Victoria Island", category: "Fine dining", kind: "dining", x: -58, z: 102, w: 20, d: 17, h: 7, color: "#e9d9bf", accent: "#8c342d" },
-  { name: "The Yellow Chilli", district: "Victoria Island", category: "Nigerian dining", kind: "dining", x: -23, z: 102, w: 20, d: 17, h: 7, color: "#e1c391", accent: "#d47b29" },
-  { name: "Cactus Restaurant", district: "Victoria Island", category: "Restaurant & bakery", kind: "dining", x: 12, z: 102, w: 20, d: 17, h: 7, color: "#d5ddce", accent: "#56845d" },
-  { name: "Club Illusion", district: "Victoria Island", category: "Afrobeats club", kind: "nightlife", x: -59, z: 124, w: 20, d: 18, h: 10, color: "#353443", accent: "#ae51d8" },
-  { name: "Sky Bar MKT", district: "Victoria Island", category: "Rooftop lounge", kind: "nightlife", x: -23, z: 124, w: 20, d: 18, h: 12, color: "#424047", accent: "#f5b34f" },
-  { name: "Shades Social", district: "Victoria Island", category: "Bar & live music", kind: "nightlife", x: 12, z: 124, w: 20, d: 18, h: 9, color: "#514642", accent: "#df654d" },
-  { name: "Quilox", district: "Victoria Island", category: "Superclub", kind: "nightlife", x: 48, z: 101, w: 22, d: 19, h: 13, color: "#342c3c", accent: "#d13e87" },
-  { name: "Vaniti Lagos", district: "Victoria Island", category: "VIP nightlife", kind: "nightlife", x: 48, z: 124, w: 21, d: 18, h: 11, color: "#393541", accent: "#c8a1e0" },
-  { name: "Cubana", district: "Victoria Island", category: "Lounge & club", kind: "nightlife", x: 81, z: 120, w: 20, d: 18, h: 10, color: "#544239", accent: "#e0a13a" },
+  { name: "RSVP Lagos", district: "Victoria Island", category: "Fine dining", kind: "dining", x: -70, z: 98, w: 20, d: 17, h: 7, color: "#e9d9bf", accent: "#8c342d" },
+  { name: "The Yellow Chilli", district: "Victoria Island", category: "Nigerian dining", kind: "dining", x: -26, z: 98, w: 20, d: 17, h: 7, color: "#e1c391", accent: "#d47b29" },
+  { name: "Cactus Restaurant", district: "Victoria Island", category: "Restaurant & bakery", kind: "dining", x: 18, z: 98, w: 20, d: 17, h: 7, color: "#d5ddce", accent: "#56845d" },
+  { name: "Club Illusion", district: "Victoria Island", category: "Afrobeats club", kind: "nightlife", x: -70, z: 130, w: 20, d: 18, h: 10, color: "#353443", accent: "#ae51d8" },
+  { name: "Sky Bar MKT", district: "Victoria Island", category: "Rooftop lounge", kind: "nightlife", x: -26, z: 130, w: 20, d: 18, h: 12, color: "#424047", accent: "#f5b34f" },
+  { name: "Shades Social", district: "Victoria Island", category: "Bar & live music", kind: "nightlife", x: 18, z: 130, w: 20, d: 18, h: 9, color: "#514642", accent: "#df654d" },
+  { name: "Quilox", district: "Victoria Island", category: "Superclub", kind: "nightlife", x: 62, z: 98, w: 22, d: 19, h: 13, color: "#342c3c", accent: "#d13e87" },
+  { name: "Vaniti Lagos", district: "Victoria Island", category: "VIP nightlife", kind: "nightlife", x: 62, z: 130, w: 21, d: 18, h: 11, color: "#393541", accent: "#c8a1e0" },
+  { name: "Cubana", district: "Victoria Island", category: "Lounge & club", kind: "nightlife", x: 100, z: 130, w: 20, d: 18, h: 10, color: "#544239", accent: "#e0a13a" },
   { name: "Eko Convention Centre", district: "Victoria Island", category: "Concerts & events", kind: "event", x: -91, z: 155, w: 30, d: 22, h: 11, color: "#d8d2c3", accent: "#b78749", featured: true },
   { name: "The Civic Centre", district: "Victoria Island", category: "Waterfront events", kind: "event", x: 81, z: 157, w: 27, d: 20, h: 10, color: "#d6dedc", accent: "#4f9a9e" },
   { name: "Terra Kulture", district: "Victoria Island", category: "Arts & theatre", kind: "culture", x: -126, z: 119, w: 20, d: 17, h: 8, color: "#d4bc91", accent: "#b74935" },
@@ -293,25 +266,158 @@ const LANDMARKS: Landmark[] = [
   { name: "Tarkwa Bay", district: "Lagos Coast", category: "Island beach", kind: "beach", x: -164, z: 190, w: 21, d: 17, h: 5, color: "#e4cf9e", accent: "#347fa0" },
   { name: "Apapa Port Complex", district: "Apapa", category: "Cargo & shipping", kind: "industrial", x: -219, z: -30, w: 35, d: 27, h: 11, color: "#aeb3ab", accent: "#df9c35", featured: true },
   { name: "Tin Can Island Port", district: "Apapa", category: "Container terminal", kind: "industrial", x: -222, z: 14, w: 31, d: 24, h: 9, color: "#b7b6aa", accent: "#d34c37" },
-  { name: "GTCO Place", district: "Ajah", category: "Corporate headquarters", kind: "office", x: 303, z: 137, w: 21, d: 14, h: 31, color: "#d5dad9", accent: "#dd5c3d", featured: true },
-  { name: "FirstBank Business Centre", district: "Ajah", category: "Corporate offices", kind: "office", x: 340, z: 137, w: 18, d: 14, h: 26, color: "#c9d2d8", accent: "#3978ad" },
-  { name: "Novare Lekki Mall", district: "Sangotedo", category: "Shopping & cinema", kind: "retail", x: 300, z: 194, w: 29, d: 22, h: 11, color: "#d5d8d3", accent: "#4c92a4", featured: true },
-  { name: "Pan-Atlantic University", district: "Ibeju-Lekki", category: "University campus", kind: "education", x: 342, z: 194, w: 25, d: 21, h: 13, color: "#ddd3b7", accent: "#48805b" },
+  { name: "GTCO Place", district: "Ajah", category: "Corporate headquarters", kind: "office", x: 286, z: 137, w: 21, d: 14, h: 31, color: "#d5dad9", accent: "#dd5c3d", featured: true },
+  { name: "FirstBank Business Centre", district: "Ajah", category: "Corporate offices", kind: "office", x: 350, z: 126, w: 18, d: 14, h: 26, color: "#c9d2d8", accent: "#3978ad" },
+  { name: "Novare Lekki Mall", district: "Sangotedo", category: "Shopping & cinema", kind: "retail", x: 292, z: 190, w: 29, d: 22, h: 11, color: "#d5d8d3", accent: "#4c92a4", featured: true },
+  { name: "Pan-Atlantic University", district: "Ibeju-Lekki", category: "University campus", kind: "education", x: 350, z: 194, w: 25, d: 21, h: 13, color: "#ddd3b7", accent: "#48805b" },
   { name: "Lekki Free Trade Zone", district: "Ibeju-Lekki", category: "Industry & logistics", kind: "industrial", x: 343, z: 235, w: 25, d: 25, h: 10, color: "#b4b5ad", accent: "#db9d3c" },
   { name: "Victoria Garden City", district: "Ajah", category: "Gated residential estate", kind: "retail", x: 298, z: 234, w: 18, d: 14, h: 8, color: "#d6d0bd", accent: "#568451" },
-  { name: "Sangotedo Business Park", district: "Sangotedo", category: "Commercial offices", kind: "office", x: 340, z: 160, w: 24, d: 12, h: 24, color: "#c8d3d2", accent: "#5f9ea0" },
+  { name: "Sangotedo Business Park", district: "Sangotedo", category: "Commercial offices", kind: "office", x: 350, z: 158, w: 24, d: 12, h: 24, color: "#c8d3d2", accent: "#5f9ea0" },
   { name: "Eko Pearl Towers", district: "Eko Atlantic", category: "Residential high-rise", kind: "office", x: -139, z: 124, w: 21, d: 20, h: 42, color: "#cbd7d8", accent: "#4a9ba6", featured: true },
+  { name: "Dangote Refinery", district: "Ibeju-Lekki", category: "Refinery under construction", kind: "industrial", x: 430, z: 188, w: 20, d: 14, h: 10, color: "#b9b3a6", accent: "#db9d3c", featured: true },
+  { name: "Fertiliser Plant", district: "Ibeju-Lekki", category: "Granulation & blending", kind: "industrial", x: 374, z: 194, w: 20, d: 18, h: 12, color: "#c0bcb0", accent: "#4f9a5b" },
+  { name: "Steel & Pipe Mill", district: "Ibeju-Lekki", category: "Steel rolling & pipe", kind: "industrial", x: 346, z: 258, w: 20, d: 18, h: 11, color: "#adafa8", accent: "#b74c35" },
+  { name: "FTZ Logistics Warehouses", district: "Ibeju-Lekki", category: "Warehousing & distribution", kind: "industrial", x: 408, z: 250, w: 28, d: 20, h: 9, color: "#c4c2b8", accent: "#376c79" },
+  { name: "Lekki Deep Sea Port", district: "Ibeju-Lekki", category: "Container terminal & quay", kind: "industrial", x: 450, z: 270, w: 36, d: 22, h: 10, color: "#aeb3ab", accent: "#df9c35", featured: true },
+  { name: "Quarry & Concrete Works", district: "Ibeju-Lekki", category: "Aggregate & batching", kind: "industrial", x: 455, z: 220, w: 22, d: 18, h: 8, color: "#b0a898", accent: "#7a6a55" },
+  { name: "Truck Park Terminal", district: "Ibeju-Lekki", category: "Haulage & staging", kind: "industrial", x: 400, z: 282, w: 26, d: 12, h: 6, color: "#bab5a6", accent: "#d34c37" },
 ];
+
+const LABEL_OFFSETS: [number, number][] = [[0, 0]];
+for (let radius = 14; radius <= 360; radius += 14) {
+  for (let step = 0; step < 16; step++) {
+    const angle = (step / 16) * Math.PI * 2;
+    LABEL_OFFSETS.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+  }
+}
+
+type LabelRefs = React.MutableRefObject<(HTMLDivElement | null)[]>;
+type LeaderRefs = React.MutableRefObject<(HTMLSpanElement | null)[]>;
+
+function registerNode<T extends HTMLElement>(refs: React.MutableRefObject<(T | null)[]>, index: number, node: T | null) {
+  refs.current[index] = node;
+}
+
+function LandmarkLabelLayout({ labels, leaders, active }: { labels: LabelRefs; leaders: LeaderRefs; active: boolean }) {
+  const camera = useThree((state) => state.camera);
+  const size = useThree((state) => state.size);
+  const points = useMemo(
+    () => LANDMARKS.map((place) => new THREE.Vector3(place.x, place.h + 2.65, place.z)),
+    [],
+  );
+  const projected = useMemo(() => points.map(() => new THREE.Vector3()), [points]);
+  const lastCamera = useRef({
+    x: Infinity,
+    y: Infinity,
+    z: Infinity,
+    qx: Infinity,
+    qy: Infinity,
+    qz: Infinity,
+    qw: Infinity,
+    width: 0,
+    height: 0,
+  });
+
+  useFrame(() => {
+    if (!active) return;
+    if (labels.current.length < LANDMARKS.length || labels.current.some((label, index) => !label || !leaders.current[index])) {
+      return;
+    }
+    const previous = lastCamera.current;
+    if (
+      Math.abs(camera.position.x - previous.x) < 0.02 &&
+      Math.abs(camera.position.y - previous.y) < 0.02 &&
+      Math.abs(camera.position.z - previous.z) < 0.02 &&
+      Math.abs(camera.quaternion.x - previous.qx) < 0.0001 &&
+      Math.abs(camera.quaternion.y - previous.qy) < 0.0001 &&
+      Math.abs(camera.quaternion.z - previous.qz) < 0.0001 &&
+      Math.abs(camera.quaternion.w - previous.qw) < 0.0001 &&
+      previous.width === size.width &&
+      previous.height === size.height
+    ) {
+      return;
+    }
+    Object.assign(previous, {
+      x: camera.position.x,
+      y: camera.position.y,
+      z: camera.position.z,
+      qx: camera.quaternion.x,
+      qy: camera.quaternion.y,
+      qz: camera.quaternion.z,
+      qw: camera.quaternion.w,
+      width: size.width,
+      height: size.height,
+    });
+
+    const occupied: { left: number; right: number; top: number; bottom: number }[] = [];
+    LANDMARKS.forEach((place, index) => {
+      const label = labels.current[index];
+      const leader = leaders.current[index];
+      if (!label || !leader) return;
+      const point = projected[index].copy(points[index]).project(camera);
+      if (point.z < -1 || point.z > 1 || Math.abs(point.x) > 1.3 || Math.abs(point.y) > 1.3) {
+        label.style.visibility = "hidden";
+        leader.style.visibility = "hidden";
+        return;
+      }
+
+      const anchorX = (point.x * 0.5 + 0.5) * size.width;
+      const anchorY = (-point.y * 0.5 + 0.5) * size.height;
+      const width = Math.max(22, label.offsetWidth);
+      const height = Math.max(10, label.offsetHeight);
+      let chosenX = 0;
+      let chosenY = 0;
+      let hasSlot = false;
+      for (const [offsetX, offsetY] of LABEL_OFFSETS) {
+        const left = anchorX + offsetX - width / 2;
+        const right = left + width;
+        const top = anchorY + offsetY - height / 2;
+        const bottom = top + height;
+        if (left < 4 || right > size.width - 4 || top < 4 || bottom > size.height - 4) continue;
+        const collides = occupied.some(
+          (box) => left < box.right + 2 && right > box.left - 2 && top < box.bottom + 2 && bottom > box.top - 2,
+        );
+        if (!collides) {
+          chosenX = offsetX;
+          chosenY = offsetY;
+          occupied.push({ left, right, top, bottom });
+          hasSlot = true;
+          break;
+        }
+      }
+      label.style.visibility = "visible";
+      label.style.transform = `translate(calc(-50% + ${chosenX}px), calc(-50% + ${chosenY}px))`;
+      const length = Math.hypot(chosenX, chosenY);
+      leader.style.visibility = length > 5 ? "visible" : "hidden";
+      leader.style.left = `calc(50% - ${chosenX}px)`;
+      leader.style.top = `calc(50% - ${chosenY}px)`;
+      leader.style.width = `${length}px`;
+      leader.style.transform = `rotate(${Math.atan2(chosenY, chosenX)}rad)`;
+      if (!hasSlot) {
+        occupied.push({
+          left: anchorX + chosenX - width / 2,
+          right: anchorX + chosenX + width / 2,
+          top: anchorY + chosenY - height / 2,
+          bottom: anchorY + chosenY + height / 2,
+        });
+      }
+    });
+  });
+
+  return null;
+}
 
 function houseGrid(x0: number, z0: number, cols: number, rows: number, dx: number, dz: number, seed: number): House[] {
   const houses: House[] = [];
+  const houseSpacingX = dx * 1.15;
+  const houseSpacingZ = dz * 1.15;
   for (let ix = 0; ix < cols; ix++) {
     for (let iz = 0; iz < rows; iz++) {
       const n = ix * 7 + iz * 11 + seed;
-      if (n % 13 === 0) continue;
+      if (n % 7 === 0) continue;
       houses.push({
-        x: x0 + ix * dx + (iz % 2) * 0.8,
-        z: z0 + iz * dz,
+        x: x0 + ix * houseSpacingX + (iz % 2) * 0.8,
+        z: z0 + iz * houseSpacingZ,
         rot: (n % 5 === 0 ? 0.025 : 0) * (n % 2 === 0 ? 1 : -1),
         c: HOUSE_COLORS[n % HOUSE_COLORS.length],
         roof: ROOF_COLORS[(n + 2) % ROOF_COLORS.length],
@@ -324,7 +430,7 @@ function houseGrid(x0: number, z0: number, cols: number, rows: number, dx: numbe
   return houses;
 }
 
-function buildEstates(): { mainland: House[]; island: House[]; lekki: House[]; ajah: House[] } {
+function buildEstates(): { mainland: House[]; island: House[]; lekki: House[]; ajah: House[]; ibeju: House[] } {
   return {
     mainland: [
       ...houseGrid(-143, -123, 7, 3, 6.5, 7.2, 1),
@@ -350,6 +456,13 @@ function buildEstates(): { mainland: House[]; island: House[]; lekki: House[]; a
     ],
     lekki: houseGrid(88, 92, 13, 7, 6.7, 7.3, 48),
     ajah: houseGrid(248, 239, 7, 2, 6.6, 7.2, 76),
+    // workers' housing spilling east toward the industrial belt
+    ibeju: [
+      ...houseGrid(296, 210, 3, 2, 6.6, 7.2, 80),
+      ...houseGrid(296, 232, 3, 2, 6.6, 7.2, 84),
+      // construction workers' camp beside the refinery zone
+      ...houseGrid(454, 216, 3, 2, 6.6, 7.2, 88),
+    ],
   };
 }
 
@@ -464,7 +577,19 @@ function CompoundWall({ x, z, w, d }: { x: number; z: number; w: number; d: numb
   );
 }
 
-function LandmarkBuilding({ place }: { place: Landmark }) {
+function LandmarkBuilding({
+  place,
+  index,
+  labelRefs,
+  leaderRefs,
+  labelsVisible,
+}: {
+  place: Landmark;
+  index: number;
+  labelRefs: LabelRefs;
+  leaderRefs: LeaderRefs;
+  labelsVisible: boolean;
+}) {
   const columns = Math.max(3, Math.floor(place.w / 4));
   const floors = Math.max(1, Math.floor((place.h - 1) / 2.8));
   const glass = place.kind === "nightlife" ? "#443c54" : "#52747a";
@@ -502,6 +627,49 @@ function LandmarkBuilding({ place }: { place: Landmark }) {
         <cylinderGeometry args={[0.025, 0.025, 1.7, 5]} />
         <meshBasicMaterial color={place.accent} />
       </mesh>
+      <Html
+        center
+        position={[0, place.h + 2.65, 0]}
+        wrapperClass="venue-label"
+        style={{ pointerEvents: "none", visibility: labelsVisible ? "visible" : "hidden" }}
+      >
+        <div
+          ref={(node) => {
+            registerNode(labelRefs, index, node);
+          }}
+          style={{
+            position: "relative",
+            transform: "translate(-50%, -50%)",
+            color: "#fffdf1",
+            fontSize: 8,
+            fontWeight: 800,
+            lineHeight: "10px",
+            letterSpacing: "0.01em",
+            textAlign: "center",
+            whiteSpace: "nowrap",
+            textShadow: "0 1px 2px #26332b, 0 0 4px #26332b",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          <span
+            ref={(node) => {
+              registerNode(leaderRefs, index, node);
+            }}
+            style={{
+              position: "absolute",
+              display: "block",
+              left: "50%",
+              top: "50%",
+              height: 0,
+              borderTop: `1px solid ${place.accent}`,
+              transformOrigin: "left center",
+              visibility: "hidden",
+            }}
+          />
+          {place.name}
+        </div>
+      </Html>
       {place.kind === "office" && (
         <>
           <mesh position={[-place.w * 0.31, place.h * 0.56, 0]}>
@@ -542,6 +710,24 @@ function LandmarkBuilding({ place }: { place: Landmark }) {
             </mesh>
           ))}
         </>
+      )}
+      {place.kind === "radio" && (
+        <group position={[0, place.h + 2.5, 0]}>
+          <mesh>
+            <cylinderGeometry args={[0.18, 0.35, 4.5, 8]} />
+            <meshStandardMaterial color="#77766d" roughness={0.82} />
+          </mesh>
+          {[0, 1.8, -1.8].map((offset, index) => (
+            <mesh key={index} position={[0, offset, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.07, 0.07, index === 0 ? 5 : 3.2, 6]} />
+              <meshStandardMaterial color={place.accent} emissive={place.accent} emissiveIntensity={0.3} />
+            </mesh>
+          ))}
+          <mesh position={[0, 2.4, 0]}>
+            <sphereGeometry args={[0.22, 8, 6]} />
+            <meshStandardMaterial color="#f2d265" emissive="#e9a934" emissiveIntensity={0.65} />
+          </mesh>
+        </group>
       )}
       {place.kind === "hub" && (
         <>
@@ -631,29 +817,6 @@ function LandmarkBuilding({ place }: { place: Landmark }) {
           <meshStandardMaterial color="#76553b" roughness={1} />
         </mesh>
       )}
-      <Html
-        center
-        position={[0, place.h + 2.65, 0]}
-        wrapperClass="venue-label"
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          style={{
-            color: "#fffdf1",
-            fontSize: 9,
-            fontWeight: 800,
-            lineHeight: 1,
-            letterSpacing: "0.01em",
-            textAlign: "center",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            userSelect: "none",
-            textShadow: "0 1px 2px #26332b, 0 0 4px #26332b",
-          }}
-        >
-          {place.name}
-        </div>
-      </Html>
     </group>
   );
 }
@@ -674,6 +837,321 @@ function MarketRow({ x, z }: { x: number; z: number }) {
           </mesh>
         </group>
       ))}
+    </group>
+  );
+}
+
+/** Tower crane with a prefab panel on the hook — the construction read. Static (map perf). */
+function TowerCrane({ x, z, angle, h = 24 }: { x: number; z: number; angle: number; h?: number }) {
+  const yellow = "#e0a13a";
+  return (
+    <group position={[x, 0, z]} rotation={[0, angle, 0]}>
+      <mesh position={[0, 0.3, 0]}>
+        <boxGeometry args={[4.5, 0.6, 4.5]} />
+        <meshStandardMaterial color="#8f8a80" roughness={1} />
+      </mesh>
+      <mesh position={[0, h / 2, 0]}>
+        <boxGeometry args={[1.4, h, 1.4]} />
+        <meshStandardMaterial color={yellow} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, h + 2, 0]}>
+        <boxGeometry args={[0.9, 4, 0.9]} />
+        <meshStandardMaterial color={yellow} roughness={0.8} />
+      </mesh>
+      {/* jib + counter-jib */}
+      <mesh position={[6.5, h - 1, 0]}>
+        <boxGeometry args={[17, 0.9, 0.9]} />
+        <meshStandardMaterial color={yellow} roughness={0.8} />
+      </mesh>
+      <mesh position={[-6, h - 1, 0]}>
+        <boxGeometry args={[6, 0.9, 0.9]} />
+        <meshStandardMaterial color={yellow} roughness={0.8} />
+      </mesh>
+      <mesh position={[-8.5, h - 2.2, 0]}>
+        <boxGeometry args={[1.2, 2.4, 1.6]} />
+        <meshStandardMaterial color="#55524d" roughness={0.9} />
+      </mesh>
+      {/* tie bars */}
+      {[
+        { x: 6.5, len: 15.5, rz: 0.32 },
+        { x: -6, len: 7.5, rz: -0.5 },
+      ].map((tie, i) => (
+        <mesh key={i} position={[tie.x, h + 0.6, 0]} rotation={[0, 0, tie.rz]}>
+          <boxGeometry args={[tie.len, 0.12, 0.12]} />
+          <meshStandardMaterial color="#3d3a36" roughness={0.9} />
+        </mesh>
+      ))}
+      {/* hoist cable + hanging prefab panel */}
+      <mesh position={[9, h - 4.5, 0]}>
+        <boxGeometry args={[0.09, 7, 0.09]} />
+        <meshStandardMaterial color="#2c2a27" roughness={0.9} />
+      </mesh>
+      <mesh position={[9, h - 9, 0]}>
+        <boxGeometry args={[3.2, 2.2, 0.35]} />
+        <meshStandardMaterial color="#d9d2c2" roughness={0.95} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Unfinished concrete frame: columns + floor slabs, no walls. */
+function ConcreteFrame({ x, z, w, d, floors, floorH = 4 }: { x: number; z: number; w: number; d: number; floors: number; floorH?: number }) {
+  const h = floors * floorH;
+  const cols: [number, number][] = [];
+  const nx = Math.max(2, Math.round(w / 5));
+  const nz = Math.max(2, Math.round(d / 5));
+  for (let ix = 0; ix < nx; ix++) {
+    for (let iz = 0; iz < nz; iz++) {
+      cols.push([-w / 2 + (ix * w) / (nx - 1), -d / 2 + (iz * d) / (nz - 1)]);
+    }
+  }
+  return (
+    <group position={[x, 0, z]}>
+      {cols.map(([cx, cz], i) => (
+        <mesh key={i} position={[cx, h / 2, cz]}>
+          <boxGeometry args={[0.7, h, 0.7]} />
+          <meshStandardMaterial color="#cfc8b8" roughness={0.95} />
+        </mesh>
+      ))}
+      {Array.from({ length: floors }, (_, f) => (
+        <mesh key={f} position={[0, (f + 1) * floorH, 0]}>
+          <boxGeometry args={[w + 0.5, 0.5, d + 0.5]} />
+          <meshStandardMaterial color="#bdb5a4" roughness={0.95} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Dangote Refinery mega-site, mid-construction: tank farm, distillation
+ * columns, open concrete frames, scaffolds, tower cranes, cabins, hoarding.
+ * Site: x 388–438, z 178–218. The ops block comes from its landmark entry.
+ */
+function RefineryConstruction() {
+  const tanks: [number, number][] = [
+    [429, 186], [436, 186], [429, 194], [436, 194], [429, 202], [436, 202],
+  ];
+  return (
+    <group>
+      {/* graded gravel pad, fence to fence */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[414, 0.15, 201]}>
+        <planeGeometry args={[60, 38]} />
+        <meshStandardMaterial color="#b3a893" roughness={1} />
+      </mesh>
+      {/* perimeter hoarding: north gate to the expressway, west gate to the access road */}
+      {[
+        { x: 392, z: 182, w: 16 },
+        { x: 428, z: 182, w: 32 },
+        { x: 414, z: 220, w: 60 },
+        { x: 444, z: 201, w: 0, d: 38 },
+      ].map((run, i) =>
+        run.w > 0 ? (
+          <mesh key={i} position={[run.x, 1.1, run.z]}>
+            <boxGeometry args={[run.w, 2.2, 0.3]} />
+            <meshStandardMaterial color="#db9d3c" roughness={0.9} />
+          </mesh>
+        ) : (
+          <mesh key={i} position={[run.x, 1.1, run.z]}>
+            <boxGeometry args={[0.3, 2.2, run.d]} />
+            <meshStandardMaterial color="#db9d3c" roughness={0.9} />
+          </mesh>
+        ),
+      )}
+      {/* west fence split around the gate */}
+      {[
+        { z: 190, d: 16 },
+        { z: 213, d: 14 },
+      ].map((run, i) => (
+        <mesh key={`w${i}`} position={[384, 1.1, run.z]}>
+          <boxGeometry args={[0.3, 2.2, run.d]} />
+          <meshStandardMaterial color="#db9d3c" roughness={0.9} />
+        </mesh>
+      ))}
+      {/* storage tank farm */}
+      {tanks.map(([tx, tz], i) => (
+        <group key={i} position={[tx, 0, tz]}>
+          <mesh position={[0, 4.5, 0]}>
+            <cylinderGeometry args={[3.2, 3.2, 9, 14]} />
+            <meshStandardMaterial color="#d8d5cc" roughness={0.7} />
+          </mesh>
+          <mesh position={[0, 9.1, 0]}>
+            <cylinderGeometry args={[3.25, 3.25, 0.25, 14]} />
+            <meshStandardMaterial color="#8f8a80" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+      {/* tank manifolds */}
+      {[
+        [423, 192],
+        [423, 200],
+      ].map(([px, pz], i) => (
+        <mesh key={i} position={[px, 0.6, pz]}>
+          <boxGeometry args={[2, 1.2, 1]} />
+          <meshStandardMaterial color="#7a756a" roughness={0.85} />
+        </mesh>
+      ))}
+      {/* pipe rack along the south */}
+      <mesh position={[418, 1.2, 218.5]}>
+        <boxGeometry args={[28, 0.7, 0.9]} />
+        <meshStandardMaterial color="#7a756a" roughness={0.85} />
+      </mesh>
+      {/* distillation columns with platforms */}
+      {[
+        { x: 396, z: 200, h: 24, r: 1.6 },
+        { x: 392, z: 208, h: 20, r: 1.4 },
+        { x: 400, z: 210, h: 16, r: 1.2 },
+      ].map((c, i) => (
+        <group key={i} position={[c.x, 0, c.z]}>
+          <mesh position={[0, c.h / 2, 0]}>
+            <cylinderGeometry args={[c.r, c.r * 1.1, c.h, 12]} />
+            <meshStandardMaterial color="#c9c2b2" roughness={0.6} metalness={0.25} />
+          </mesh>
+          <mesh position={[0, c.h * 0.55, 0]}>
+            <cylinderGeometry args={[c.r + 0.7, c.r + 0.7, 0.3, 12]} />
+            <meshStandardMaterial color="#8f8a80" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+      {/* open frames going up */}
+      <ConcreteFrame x={416} z={210} w={18} d={10} floors={2} />
+      <ConcreteFrame x={392} z={187} w={12} d={8} floors={3} floorH={4} />
+      {/* scaffold row on the 3-floor frame */}
+      {[-4.5, -1.5, 1.5, 4.5].map((dx) => (
+        <mesh key={dx} position={[392 + dx, 4, 191.8]}>
+          <boxGeometry args={[0.16, 8, 0.16]} />
+          <meshStandardMaterial color="#6b5f45" roughness={0.9} />
+        </mesh>
+      ))}
+      {[2.5, 5.5].map((y) => (
+        <mesh key={y} position={[392, y, 191.8]}>
+          <boxGeometry args={[10, 0.14, 1.1]} />
+          <meshStandardMaterial color="#9a7d55" roughness={0.95} />
+        </mesh>
+      ))}
+      {/* tower cranes swinging loads over the frames */}
+      <TowerCrane x={398} z={194} angle={0.5} />
+      <TowerCrane x={434} z={214} angle={-2.2} h={27} />
+      {/* site office cabins by the west gate */}
+      {[196, 201].map((cz) => (
+        <mesh key={cz} position={[388, 1.4, cz]}>
+          <boxGeometry args={[6, 2.6, 2.4]} />
+          <meshStandardMaterial color={cz === 196 ? "#dfe5e8" : "#274b73"} roughness={0.8} />
+        </mesh>
+      ))}
+      {/* aggregate piles */}
+      {[
+        { x: 400, z: 216, r: 3 },
+        { x: 394, z: 216, r: 2.5 },
+      ].map((p, i) => (
+        <mesh key={i} position={[p.x, 0, p.z]}>
+          <coneGeometry args={[p.r, 2.6, 9]} />
+          <meshStandardMaterial color="#9a938a" roughness={1} />
+        </mesh>
+      ))}
+      {/* gate barriers */}
+      {[198, 200.5, 203, 205.5].map((bz) => (
+        <mesh key={bz} position={[382, 0.5, bz]}>
+          <boxGeometry args={[0.4, 1, 2]} />
+          <meshStandardMaterial color="#e07830" roughness={0.85} />
+        </mesh>
+      ))}
+      {/* flare stack, unlit — still being built */}
+      <group position={[388, 0, 214]}>
+        <mesh position={[0, 15, 0]}>
+          <cylinderGeometry args={[0.5, 0.7, 30, 8]} />
+          <meshStandardMaterial color="#8f8a80" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, 30.2, 0]}>
+          <cylinderGeometry args={[0.7, 0.7, 0.8, 8]} />
+          <meshStandardMaterial color="#55524d" roughness={0.9} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/** Ship-to-shore cranes + stacked boxes on the port quay. */
+function PortCranes() {
+  const boxes = ["#b74c35", "#376c79", "#4f9a5b", "#8f8a80", "#db9d3c"];
+  return (
+    <group>
+      {[424, 440].map((cx) => (
+        <group key={cx} position={[cx, 0, 277.5]}>
+          {[-3.5, 3.5].map((dx) =>
+            [-2.5, 2.5].map((dz, j) => (
+              <mesh key={`${dx}${j}`} position={[dx, 6, dz]}>
+                <boxGeometry args={[0.8, 12, 0.8]} />
+                <meshStandardMaterial color="#df9c35" roughness={0.8} />
+              </mesh>
+            )),
+          )}
+          <mesh position={[0, 12.7, 0]}>
+            <boxGeometry args={[9, 1.4, 6.5]} />
+            <meshStandardMaterial color="#df9c35" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 16, 0]}>
+            <boxGeometry args={[2, 6, 2]} />
+            <meshStandardMaterial color="#8f6a25" roughness={0.85} />
+          </mesh>
+          {/* boom reaching over the harbor water */}
+          <mesh position={[0, 17.5, 10]}>
+            <boxGeometry args={[1.2, 1.2, 22]} />
+            <meshStandardMaterial color="#df9c35" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 12, 14]}>
+            <boxGeometry args={[0.09, 9, 0.09]} />
+            <meshStandardMaterial color="#2c2a27" roughness={0.9} />
+          </mesh>
+          <mesh position={[0, 6.5, 14]}>
+            <boxGeometry args={[6, 2.6, 2.4]} />
+            <meshStandardMaterial color="#376c79" roughness={0.85} />
+          </mesh>
+        </group>
+      ))}
+      {/* stacked export boxes east of the terminal */}
+      {[262, 268].map((rz, r) =>
+        [454, 460, 466].map((bx, i) => (
+          <group key={`${r}${i}`} position={[bx, 0, rz]}>
+            <mesh position={[0, 1.3, 0]}>
+              <boxGeometry args={[6, 2.6, 2.4]} />
+              <meshStandardMaterial color={boxes[(r * 3 + i) % boxes.length]} roughness={0.88} />
+            </mesh>
+            {i % 2 === 0 && (
+              <mesh position={[0, 3.9, 0]}>
+                <boxGeometry args={[6, 2.6, 2.4]} />
+                <meshStandardMaterial color={boxes[(r * 3 + i + 2) % boxes.length]} roughness={0.88} />
+              </mesh>
+            )}
+          </group>
+        )),
+      )}
+    </group>
+  );
+}
+
+/** Quarry crusher + aggregate cones. */
+function QuarryPiles({ x, z }: { x: number; z: number }) {
+  return (
+    <group position={[x, 0, z]}>
+      {[
+        { dx: -5, dz: -3, r: 5, h: 4.5 },
+        { dx: 2, dz: -4, r: 4, h: 3.6 },
+        { dx: 5, dz: 3, r: 5.5, h: 5 },
+      ].map((p, i) => (
+        <mesh key={i} position={[p.dx, 0, p.dz]}>
+          <coneGeometry args={[p.r, p.h, 9]} />
+          <meshStandardMaterial color={i === 1 ? "#8a8378" : "#9a938a"} roughness={1} />
+        </mesh>
+      ))}
+      <mesh position={[0, 2, 4]}>
+        <boxGeometry args={[7, 4, 3]} />
+        <meshStandardMaterial color="#6f6a5e" roughness={0.9} />
+      </mesh>
+      <mesh position={[-3, 3.4, 0]} rotation={[0, 0.5, 0.5]}>
+        <boxGeometry args={[0.8, 0.4, 9]} />
+        <meshStandardMaterial color="#55524d" roughness={0.9} />
+      </mesh>
     </group>
   );
 }
@@ -723,10 +1201,10 @@ function CityTrees() {
   );
 }
 
-function RegionLabel({ position, children }: { position: [number, number, number]; children: string }) {
+function RegionLabel({ position, children, visible }: { position: [number, number, number]; children: string; visible: boolean }) {
   return (
     <group position={position}>
-      <Html center distanceFactor={120} wrapperClass="venue-label" style={{ pointerEvents: "none" }}>
+      <Html center distanceFactor={120} wrapperClass="venue-label" style={{ pointerEvents: "none", visibility: visible ? "visible" : "hidden" }}>
         <div
           style={{
             pointerEvents: "none",
@@ -747,18 +1225,20 @@ function RegionLabel({ position, children }: { position: [number, number, number
 }
 
 /** Static, expanded Lagos city map. Playable Yaba roads and plots stay at their original coordinates. */
-export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }) {
+export function LagosMapBlocks({ onPick, labelsVisible = true }: { onPick?: (plotId: string) => void; labelsVisible?: boolean }) {
   const roads = useMemo(() => ROADS, []);
   const cityRoads = useMemo(() => CITY_ROADS, []);
   const plots = useMemo(() => PLOTS, []);
   const estates = useMemo(() => buildEstates(), []);
   const downAt = useRef<{ x: number; y: number } | null>(null);
+  const labelRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const leaderRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
   return (
     <group>
       {/* ocean */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.35, 30]}>
-        <planeGeometry args={[760, 760]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[60, -0.35, 60]}>
+        <planeGeometry args={[1100, 1000]} />
         <meshStandardMaterial color="#6fb3d2" roughness={1} />
       </mesh>
       {/* mainland: Yaba grows into denser mixed residential and commercial districts */}
@@ -776,6 +1256,22 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
       <mesh geometry={LEKKI_GEOMETRY} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.13, 0]}>
         <meshStandardMaterial color="#b9c78e" roughness={1} />
       </mesh>
+      {/* Ibeju-Lekki industrial mainland — overlaps Lekki slightly, 5mm lower to avoid shimmer */}
+      <mesh geometry={IBEJU_GEOMETRY} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.125, 0]}>
+        <meshStandardMaterial color="#c2b28e" roughness={1} />
+      </mesh>
+      {/* graded concrete aprons across the industrial belt (below landmark pads + roads) */}
+      {[
+        { x: 361, z: 226, w: 50, d: 88 },
+        { x: 390.5, z: 261, w: 45, d: 38 },
+        { x: 432, z: 277, w: 40, d: 6 },
+        { x: 459, z: 248.5, w: 26, d: 61 },
+      ].map((a, i) => (
+        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[a.x, 0.15, a.z]}>
+          <planeGeometry args={[a.w, a.d]} />
+          <meshStandardMaterial color="#b0a898" roughness={1} />
+        </mesh>
+      ))}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-164, 0.15, 190]}>
         <circleGeometry args={[22, 40]} />
         <meshStandardMaterial color="#e1cb96" roughness={1} />
@@ -824,7 +1320,22 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
       <EstateInstances houses={estates.island} />
       <EstateInstances houses={estates.lekki} />
       <EstateInstances houses={estates.ajah} />
-      {LANDMARKS.map((place) => <LandmarkBuilding key={`${place.name}-${place.district}`} place={place} />)}
+      <EstateInstances houses={estates.ibeju} />
+      {LANDMARKS.map((place, index) => (
+        <LandmarkBuilding
+          key={`${place.name}-${place.district}`}
+          place={place}
+          index={index}
+          labelRefs={labelRefs}
+          leaderRefs={leaderRefs}
+          labelsVisible={labelsVisible}
+        />
+      ))}
+      <LandmarkLabelLayout labels={labelRefs} leaders={leaderRefs} active={labelsVisible} />
+      {/* Ibeju-Lekki industrial belt dressing */}
+      <RefineryConstruction />
+      <PortCranes />
+      <QuarryPiles x={360} z={274} />
       {[
         [-111, -115, 27, 21],
         [104, -115, 30, 21],
@@ -887,16 +1398,17 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
         })}
       </group>
       <CityTrees />
-      <RegionLabel position={[45, 0.5, 12]}>YABA</RegionLabel>
-      <RegionLabel position={[-112, 0.5, -32]}>SURULERE</RegionLabel>
-      <RegionLabel position={[12, 0.5, -124]}>IKEJA</RegionLabel>
-      <RegionLabel position={[-3, 0.5, 74]}>LAGOS LAGOON</RegionLabel>
-      <RegionLabel position={[-24, 0.5, 142]}>VICTORIA ISLAND</RegionLabel>
-      <RegionLabel position={[145, 0.5, 174]}>LEKKI</RegionLabel>
-      <RegionLabel position={[-126, 0.5, 160]}>EKO ATLANTIC</RegionLabel>
-      <RegionLabel position={[228, 0.5, 215]}>LEKKI · AJAH</RegionLabel>
-      <RegionLabel position={[-222, 0.5, 44]}>APAPA PORT</RegionLabel>
-      <RegionLabel position={[324, 0.5, 253]}>SANGOTEDO · IBEJU-LEKKI</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[45, 0.5, 12]}>YABA</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[-112, 0.5, -32]}>SURULERE</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[12, 0.5, -124]}>IKEJA</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[-3, 0.5, 74]}>LAGOS LAGOON</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[-24, 0.5, 142]}>VICTORIA ISLAND</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[145, 0.5, 174]}>LEKKI</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[-126, 0.5, 160]}>EKO ATLANTIC</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[228, 0.5, 215]}>LEKKI · AJAH</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[-222, 0.5, 44]}>APAPA PORT</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[324, 0.5, 253]}>SANGOTEDO · IBEJU-LEKKI</RegionLabel>
+      <RegionLabel visible={labelsVisible} position={[408, 0.5, 162]}>IBEJU-LEKKI INDUSTRIAL BELT</RegionLabel>
     </group>
   );
 }

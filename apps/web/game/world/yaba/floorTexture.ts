@@ -9,9 +9,9 @@ import * as THREE from "three";
  * A paired roughness map keeps tiles satin and grout matte under the lights.
  */
 
-const TONE_A = "#d9a268";
-const TONE_B = "#eccf9f";
-const GROUT = "#8a7358";
+const TONE_A = "#cdb896";
+const TONE_B = "#e9dcc3";
+const GROUT = "#766957";
 
 function paintTiles(ctx: CanvasRenderingContext2D, S: number, n: number): void {
   const cell = S / n;
@@ -31,7 +31,7 @@ function paintTiles(ctx: CanvasRenderingContext2D, S: number, n: number): void {
   }
   // grout lines
   ctx.strokeStyle = GROUT;
-  ctx.lineWidth = Math.max(3, S / 64);
+  ctx.lineWidth = Math.max(4, S / 48);
   for (let i = 0; i <= n; i++) {
     ctx.beginPath();
     ctx.moveTo(i * cell + 0.5, 0);
@@ -57,7 +57,7 @@ function paintRoughness(ctx: CanvasRenderingContext2D, S: number, n: number): vo
     }
   }
   ctx.strokeStyle = "rgb(242,242,242)";
-  ctx.lineWidth = Math.max(3, S / 64);
+  ctx.lineWidth = Math.max(4, S / 48);
   ctx.beginPath();
   for (let i = 0; i <= n; i++) {
     ctx.moveTo(i * cell + 0.5, 0);
