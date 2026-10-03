@@ -7,11 +7,14 @@ export type RemotePlayer = { userId: string; x: number; z: number; zone: string 
 
 export function useSocket(userId: string, zone: string, posRef: React.MutableRefObject<{ x: number; z: number }>) {
   const [remotes, setRemotes] = useState<Map<string, RemotePlayer>>(new Map());
+  const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const ws = new WebSocket(`${WS_URL}?userId=${encodeURIComponent(userId)}&zone=${encodeURIComponent(zone)}`);
     wsRef.current = ws;
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => setConnected(false);
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data);
@@ -35,5 +38,5 @@ export function useSocket(userId: string, zone: string, posRef: React.MutableRef
     };
   }, [userId, zone, posRef]);
 
-  return { remotes };
+  return { remotes, connected };
 }

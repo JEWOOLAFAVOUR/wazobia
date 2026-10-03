@@ -9,6 +9,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/JEWOOLAFAVOUR/wazobia/apps/server/internal/movement"
 )
 
 // Hub keeps realtime presence in Redis (TTL heartbeats) and relays
@@ -25,6 +27,10 @@ type peer struct {
 	zone   string
 	conn   *websocket.Conn
 	send   chan []byte
+	// Authoritative last-known position for speed validation (§25).
+	lastX, lastZ float64
+	lastAt      time.Time
+	hasPos      bool
 }
 
 func NewHub(rdb *redis.Client) *Hub {
@@ -90,17 +96,48 @@ func (h *Hub) readLoop(ctx context.Context, p *peer) {
 		if h.RDB != nil {
 			_ = h.RDB.Expire(context.Background(), "presence:"+p.userID, 30*time.Second).Err()
 		}
-		h.broadcast(p.zone, data, p)
-		// Refresh position in Redis (ephemeral only).
-		var msg map[string]interface{}
-		if json.Unmarshal(data, &msg) == nil {
-			if msg["type"] == "move" && h.RDB != nil {
-				_ = h.RDB.HSet(context.Background(), "presence:"+p.userID, map[string]interface{}{
-					"x": msg["x"], "z": msg["z"], "lastSeen": time.Now().Unix(),
-				}).Err()
+		if validated, ok := h.validateMove(p, data); ok {
+			h.broadcast(p.zone, validated, p)
+			// Refresh position in Redis (ephemeral only).
+			if h.RDB != nil {
+				var msg map[string]interface{}
+				if json.Unmarshal(validated, &msg) == nil {
+					_ = h.RDB.HSet(context.Background(), "presence:"+p.userID, map[string]interface{}{
+						"x": msg["x"], "z": msg["z"], "lastSeen": time.Now().Unix(),
+					}).Err()
+				}
 			}
 		}
 	}
+}
+
+// validateMove parses a client move intent, clamps it server-side, and
+// returns the authoritative payload to relay. Non-move messages pass through.
+func (h *Hub) validateMove(p *peer, data []byte) ([]byte, bool) {
+	var msg map[string]interface{}
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, false
+	}
+	if msg["type"] != "move" {
+		return data, true
+	}
+	x, _ := msg["x"].(float64)
+	z, _ := msg["z"].(float64)
+	now := time.Now()
+	dt := 0.1
+	if p.hasPos {
+		dt = now.Sub(p.lastAt).Seconds()
+	}
+	nx, nz, ok := movement.ValidateMove(p.lastX, p.lastZ, x, z, dt, !p.hasPos)
+	if !ok {
+		return nil, false
+	}
+	p.lastX, p.lastZ, p.lastAt, p.hasPos = nx, nz, now, true
+	msg["x"], msg["z"] = nx, nz
+	msg["userId"] = p.userID
+	msg["zone"] = p.zone
+	out, _ := json.Marshal(msg)
+	return out, true
 }
 
 func (h *Hub) writeLoop(ctx context.Context, p *peer) {

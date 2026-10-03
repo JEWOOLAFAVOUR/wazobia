@@ -1,94 +1,60 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import type { Building } from "@/lib/api";
+import { nearestBuilding } from "@/lib/collision";
 import { useSocket } from "@/game/networking/useSocket";
+import YabaMap from "@/game/world/YabaMap";
+import { LocalPlayer, RemotePlayers, type Pos } from "@/game/player/Player";
+import FollowCam from "@/game/camera/FollowCam";
 
-function Ground() {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-      <planeGeometry args={[120, 120]} />
-      <meshStandardMaterial color="#1a2b1f" />
-    </mesh>
-  );
-}
+export type Proximity = { id: string; name: string; kind: string; d: number } | null;
 
-function BuildingBox({ b }: { b: Building }) {
-  const color =
-    b.kind === "restaurant" ? "#c2703d" :
-    b.kind === "bank" ? "#3d7bc2" :
-    b.kind === "shop" ? "#7bc23d" : "#8a8a8a";
-  return (
-    <group position={[b.x, 0, b.z]}>
-      <mesh position={[0, 2, 0]}>
-        <boxGeometry args={[6, 4, 6]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh position={[0, 4.6, 0]}>
-        <boxGeometry args={[6.4, 0.4, 6.4]} />
-        <meshStandardMaterial color="#222" />
-      </mesh>
-    </group>
-  );
-}
+export default function YabaScene({
+  buildings,
+  userId,
+  onProximity,
+  onCount,
+}: {
+  buildings: Building[];
+  userId: string;
+  onProximity?: (p: Proximity) => void;
+  onCount?: (n: number) => void;
+}) {
+  const posRef = useRef<Pos>({ x: 0, z: 12 });
+  const [follow, setFollow] = useState(true);
+  const { remotes, connected } = useSocket(userId, "zone-b", posRef);
 
-function LocalPlayer({ posRef }: { posRef: React.MutableRefObject<{ x: number; z: number }> }) {
-  const ref = useRef<any>(null);
-  const keys = useRef<Record<string, boolean>>({});
-  useFrame((_, dt) => {
-    const speed = 8 * dt;
-    if (keys.current["w"]) posRef.current.z -= speed;
-    if (keys.current["s"]) posRef.current.z += speed;
-    if (keys.current["a"]) posRef.current.x -= speed;
-    if (keys.current["d"]) posRef.current.x += speed;
-    posRef.current.x = Math.max(-55, Math.min(55, posRef.current.x));
-    posRef.current.z = Math.max(-55, Math.min(55, posRef.current.z));
-    if (ref.current) ref.current.position.set(posRef.current.x, 1, posRef.current.z);
-  });
-  useState(() => {
-    if (typeof window !== "undefined") {
-      window.addEventListener("keydown", (e) => (keys.current[e.key.toLowerCase()] = true));
-      window.addEventListener("keyup", (e) => (keys.current[e.key.toLowerCase()] = false));
-    }
-  });
-  return (
-    <mesh ref={ref} position={[0, 1, 0]}>
-      <capsuleGeometry args={[0.5, 1, 4, 8]} />
-      <meshStandardMaterial color="#e8c547" />
-    </mesh>
-  );
-}
+  const handleMove = (x: number, z: number) => {
+    const hit = nearestBuilding(x, z, buildings, 5.5);
+    onProximity?.(hit ? { id: hit.b.id, name: hit.b.name, kind: hit.b.kind, d: hit.d } : null);
+    onCount?.(remotes.size + 1);
+  };
 
-export default function YabaScene({ buildings, userId }: { buildings: Building[]; userId: string }) {
-  const posRef = useRef({ x: 0, z: 5 });
-  const { remotes } = useSocket(userId, "zone-b", posRef);
   return (
-    <Canvas camera={{ position: [0, 25, 30], fov: 50 }} style={{ height: "60vh" }}>
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[20, 30, 10]} intensity={1.2} />
-      <Ground />
-      {/* Roads: simple cross */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <planeGeometry args={[8, 120]} />
-        <meshStandardMaterial color="#333" />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <planeGeometry args={[120, 8]} />
-        <meshStandardMaterial color="#333" />
-      </mesh>
-      {buildings.map((b) => (
-        <BuildingBox key={b.id} b={b} />
-      ))}
-      <LocalPlayer posRef={posRef} />
-      {[...remotes.values()].map((r) => (
-        <mesh key={r.userId} position={[r.x, 1, r.z]}>
-          <capsuleGeometry args={[0.5, 1, 4, 8]} />
-          <meshStandardMaterial color="#5aa9e6" />
-        </mesh>
-      ))}
-      <OrbitControls makeDefault />
-    </Canvas>
+    <div className="relative">
+      <Canvas camera={{ position: [0, 16, 26], fov: 50 }} style={{ height: "62vh" }} shadows>
+        <ambientLight intensity={0.75} />
+        <directionalLight position={[20, 30, 10]} intensity={1.3} castShadow />
+        <YabaMap buildings={buildings} />
+        <LocalPlayer posRef={posRef} buildings={buildings} onMove={handleMove} />
+        <RemotePlayers remotes={remotes} />
+        <FollowCam posRef={posRef} enabled={follow} />
+        {!follow && <OrbitControls makeDefault />}
+      </Canvas>
+      <div className="absolute top-3 left-3 flex gap-2 text-xs">
+        <button
+          onClick={() => setFollow((f) => !f)}
+          className="rounded-full bg-black/70 px-3 py-1.5 text-white border border-white/15 hover:bg-black"
+        >
+          {follow ? "Follow cam (click for orbit)" : "Orbit cam (click for follow)"}
+        </button>
+        <div className={`rounded-full px-3 py-1.5 border ${connected ? "bg-green-900/70 border-green-700 text-green-200" : "bg-red-900/70 border-red-700 text-red-200"}`}>
+          {connected ? `live · ${remotes.size + 1} here` : "connecting…"}
+        </div>
+      </div>
+    </div>
   );
 }
