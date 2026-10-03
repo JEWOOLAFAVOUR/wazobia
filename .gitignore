@@ -1,0 +1,44 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+apps/server/bin/
+apps/server/*.test
+
+# Go
+*.out
+go.sum.bak
+vendor/
+
+# Node / Next.js
+node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/dist/
+*.tsbuildinfo
+.next/
+out/
+
+# Env
+.env
+.env.*
+!.env.example
+*.local
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Docker
+postgres-data/
+redis-data/
+
+# Logs
+*.log
+logs/
