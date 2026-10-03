@@ -7,7 +7,7 @@ import type { Building } from "@/lib/api";
 import { nearestBuilding } from "@/lib/collision";
 import type { useSocket } from "@/game/networking/useSocket";
 import YabaMap from "@/game/world/YabaMap";
-import { LocalPlayer, RemotePlayers, type Pos } from "@/game/player/Player";
+import { LocalPlayer, RemotePlayers, SPAWN, type Pos } from "@/game/player/Player";
 import FollowCam from "@/game/camera/FollowCam";
 
 export type Proximity = { id: string; name: string; kind: string; d: number } | null;
@@ -41,7 +41,7 @@ export default function YabaScene({
         <ambientLight intensity={0.75} />
         <directionalLight position={[20, 30, 10]} intensity={1.3} castShadow />
         <YabaMap buildings={buildings} />
-        <LocalPlayer posRef={posRef} buildings={buildings} onMove={handleMove} />
+        <LocalPlayer posRef={posRef} initial={SPAWN} buildings={buildings} onMove={handleMove} />
         <RemotePlayers remotes={remotes} />
         <FollowCam posRef={posRef} enabled={follow} />
         {!follow && <OrbitControls makeDefault />}

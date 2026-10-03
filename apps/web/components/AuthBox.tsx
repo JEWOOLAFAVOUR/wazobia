@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 type Me = { userId: string; email: string; displayName: string };
@@ -12,12 +12,12 @@ export default function AuthBox({ onAuth }: { onAuth?: () => void }) {
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     api<Me>("/api/me")
       .then((m) => { setMe(m); onAuth?.(); })
       .catch(() => setMe(null));
-  };
-  useEffect(refresh, []);
+  }, [onAuth]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   const submit = async (mode: "register" | "login") => {
     setErr("");

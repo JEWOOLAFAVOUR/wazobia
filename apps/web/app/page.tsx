@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { api, fallbackBuildings, type Building } from "@/lib/api";
 import type { Proximity } from "@/game/world/YabaScene";
 import { useSocket } from "@/game/networking/useSocket";
+import { SPAWN } from "@/game/player/Player";
 import ChatPanel from "@/components/ChatPanel";
 import PresenceList from "@/components/PresenceList";
 import AuthBox from "@/components/AuthBox";
@@ -20,8 +21,9 @@ export default function Home() {
   const [near, setNear] = useState<Proximity>(null);
   const [count, setCount] = useState(1);
   const [walletKey, setWalletKey] = useState(0);
-  const userId = useMemo(() => `web-${Math.floor(Math.random() * 100000)}`, []);
-  const posRef = useRef({ x: 0, z: 12 });
+  const reactId = useId();
+  const userId = useMemo(() => `web-${reactId.replace(/[^a-zA-Z0-9]/g, "")}`, [reactId]);
+  const posRef = useRef({ ...SPAWN });
   const socket = useSocket(userId, "zone-b", posRef);
 
   useEffect(() => {

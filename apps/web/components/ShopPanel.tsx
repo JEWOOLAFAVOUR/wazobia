@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { api, formatNaira, type Shop, type Wallet, type Receipt } from "@/lib/api";
 
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `key-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function ShopPanel({
   shopId,
   walletKey,
@@ -18,12 +23,20 @@ export default function ShopPanel({
   const [busy, setBusy] = useState("");
 
   useEffect(() => {
-    if (!shopId) { setShop(null); return; }
-    api<Shop>(`/api/shops/${shopId}`).then(setShop).catch(() => setShop(null));
+    if (!shopId) return;
+    let alive = true;
+    api<Shop>(`/api/shops/${shopId}`)
+      .then((s) => { if (alive) setShop(s); })
+      .catch(() => { if (alive) setShop(null); });
+    return () => { alive = false; };
   }, [shopId]);
 
   useEffect(() => {
-    api<Wallet>("/api/wallet").then(setWallet).catch(() => setWallet(null));
+    let alive = true;
+    api<Wallet>("/api/wallet")
+      .then((w) => { if (alive) setWallet(w); })
+      .catch(() => { if (alive) setWallet(null); });
+    return () => { alive = false; };
   }, [walletKey]);
 
   if (!shopId) return null;
@@ -32,7 +45,7 @@ export default function ShopPanel({
     setMsg("");
     setBusy(itemId);
     try {
-      const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      const key = newIdempotencyKey();
       const r = await api<Receipt>("/api/purchases", {
         method: "POST",
         body: JSON.stringify({ shopId, itemId, idempotencyKey: key }),

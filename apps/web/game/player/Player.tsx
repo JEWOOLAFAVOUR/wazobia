@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -10,12 +10,17 @@ import type { RemotePlayer } from "@/game/networking/useSocket";
 
 export type Pos = { x: number; z: number };
 
+// Spawn point shared with the page (plain constant — safe to read during render).
+export const SPAWN: Pos = { x: 0, z: 12 };
+
 export function LocalPlayer({
   posRef,
+  initial,
   buildings,
   onMove,
 }: {
   posRef: React.MutableRefObject<Pos>;
+  initial: Pos;
   buildings: Building[];
   onMove?: (x: number, z: number) => void;
 }) {
@@ -23,8 +28,7 @@ export function LocalPlayer({
   const keys = useRef<Record<string, boolean>>({});
   const boxes = useMemo(() => buildingsToBoxes(buildings), [buildings]);
 
-  useMemo(() => {
-    if (typeof window === "undefined") return;
+  useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current[e.key.toLowerCase()] = true;
       if (["w", "a", "s", "d", " "].includes(e.key.toLowerCase())) e.preventDefault();
@@ -68,7 +72,7 @@ export function LocalPlayer({
   });
 
   return (
-    <mesh ref={ref} position={[posRef.current.x, 1, posRef.current.z]}>
+    <mesh ref={ref} position={[initial.x, 1, initial.z]}>
       <capsuleGeometry args={[0.5, 1, 4, 10]} />
       <meshStandardMaterial color="#e8c547" />
       <Html position={[0, 1.8, 0]} center distanceFactor={30}>
