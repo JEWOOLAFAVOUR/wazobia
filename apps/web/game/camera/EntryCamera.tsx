@@ -3,18 +3,35 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { cameraPointAt, resolveCameraDistance, type Occluder, type Vec3 } from "@/game/camera/collision";
 import type { EntryPos } from "@/game/player/EntryPlayer";
 
+const HEAD_HEIGHT = 1.5;
+const MIN_Y = 0.6;
+
 /**
- * Third-person orbit-follow camera.
- * Drag / right-drag orbits (touch drag included via pointer events).
- * Wheel zooms 4–10m. Collides against a simple ground clamp only (v1).
- * Touch movement sticks come later — input writes to posRef so they slot in.
+ * Third-person orbit-follow camera with wall collision.
+ * Drag orbits (left button / touch), wheel zooms 4–11m.
+ * A ray from the player's head to the desired position is tested against wall
+ * / roof / furniture boxes: the camera pulls in front of obstacles (with a
+ * safety margin) instead of clipping through them, indoors and outdoors.
+ * Pull-in is immediate (never beyond a wall); zoom-out eases back smoothly.
  */
-export default function EntryCamera({ posRef }: { posRef: React.MutableRefObject<EntryPos> }) {
+export default function EntryCamera({
+  posRef,
+  occluders,
+}: {
+  posRef: React.MutableRefObject<EntryPos>;
+  occluders?: Occluder[];
+}) {
   const { camera, gl } = useThree();
   const look = useRef(new THREE.Vector3());
   const orbit = useRef({ yaw: Math.PI, pitch: 0.42, dist: 7 });
+  const effDist = useRef(7);
+  const boxes = useRef<Occluder[]>(occluders ?? []);
+  useEffect(() => {
+    boxes.current = occluders ?? [];
+  }, [occluders]);
   const posRefProp = useRef(posRef);
   useEffect(() => {
     posRefProp.current = posRef;
@@ -76,15 +93,23 @@ export default function EntryCamera({ posRef }: { posRef: React.MutableRefObject
     const dt = Math.min(rawDt, 0.05);
     const p = posRefProp.current.current;
     const { yaw, pitch, dist } = orbit.current;
-    const target = new THREE.Vector3(p.x, 1.4, p.z);
-    const desired = new THREE.Vector3(
-      target.x + Math.sin(yaw) * Math.cos(pitch) * dist,
-      target.y + Math.sin(pitch) * dist,
-      target.z + Math.cos(yaw) * Math.cos(pitch) * dist,
-    );
-    desired.y = Math.max(1.6, desired.y);
-    camera.position.lerp(desired, 1 - Math.exp(-5 * dt));
-    look.current.lerp(target, 1 - Math.exp(-8 * dt));
+    const head: Vec3 = { x: p.x, y: HEAD_HEIGHT, z: p.z };
+    const rawDesired: Vec3 = {
+      x: p.x + Math.sin(yaw) * Math.cos(pitch) * dist,
+      y: HEAD_HEIGHT + Math.sin(pitch) * dist,
+      z: p.z + Math.cos(yaw) * Math.cos(pitch) * dist,
+    };
+    rawDesired.y = Math.max(1.6, rawDesired.y);
+    // Collision-safe distance along the same ray, then smooth only outwards:
+    // effDist never exceeds the safe target, so the camera can't sit in a wall.
+    const safe = resolveCameraDistance(head, rawDesired, boxes.current);
+    const cur = effDist.current;
+    const next = safe < cur ? safe : cur + (safe - cur) * Math.min(1, 5 * dt);
+    effDist.current = Math.min(next, safe);
+    const at = cameraPointAt(head, rawDesired, effDist.current);
+    at.y = Math.max(MIN_Y, at.y);
+    camera.position.lerp(new THREE.Vector3(at.x, at.y, at.z), 1 - Math.exp(-18 * dt));
+    look.current.lerp(new THREE.Vector3(p.x, 1.4, p.z), 1 - Math.exp(-8 * dt));
     camera.lookAt(look.current);
   });
 

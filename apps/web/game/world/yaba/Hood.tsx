@@ -19,8 +19,9 @@ import {
   plotFacingVector,
   type Plot,
 } from "./layout";
-import { BUILDING_COLLIDERS, DOORS, DOOR_INTERACTABLES, streetPieces, wallBoxes } from "./derive";
+import { BUILDING_COLLIDERS, DOOR_INTERACTABLES, streetPieces, wallBoxes } from "./derive";
 import { ApartmentInterior, RestaurantInterior, ShopInterior, interiorColliders, interiorSpots, localBoxToWorld, localToWorld } from "./interiors";
+import { yawOfPlot } from "./interiorLayout";
 import { Danfo, Sign, StreetTree, UtilityPole } from "./parts";
 import type { Interactable } from "../YabaBlock";
 
@@ -143,6 +144,101 @@ function GhostWall({ box, h, color, ghost }: { box: Box; h: number; color: strin
   );
 }
 
+const TRIM = "#f2ece0";
+const GLASS = "#202b36";
+
+function FadeMat({ ghost, color, roughness = 0.9 }: { ghost: boolean; color: string; roughness?: number }) {
+  return <meshStandardMaterial color={color} roughness={roughness} transparent={ghost} opacity={ghost ? 0.15 : 1} depthWrite={!ghost} />;
+}
+
+/** Window unit in plot-local frame. `side` rotates it onto a side wall. */
+function WindowUnit({ x, z, side, ghost }: { x: number; z: number; side?: boolean; ghost: boolean }) {
+  const frame: [number, number, number] = side ? [0.12, 1.4, 1.6] : [1.6, 1.4, 0.12];
+  const glass: [number, number, number] = side ? [0.14, 1.1, 1.3] : [1.3, 1.1, 0.14];
+  const sill: [number, number, number] = side ? [0.24, 0.12, 1.8] : [1.8, 0.12, 0.24];
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 1.75, 0]}>
+        <boxGeometry args={frame} />
+        <FadeMat ghost={ghost} color={TRIM} />
+      </mesh>
+      <mesh position={[0, 1.75, 0]}>
+        <boxGeometry args={glass} />
+        <FadeMat ghost={ghost} color={GLASS} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 1.0, 0]}>
+        <boxGeometry args={sill} />
+        <FadeMat ghost={ghost} color={TRIM} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Finished facade trim in plot-local frame (front = +z): plinth, cornice,
+ * corner boards covering raw box edges, windows and a door canopy / entry.
+ * Enterable plots get windows only on the front (their side walls are seen
+ * from inside, where exterior trim would read as dark patches).
+ */
+function FacadeDetails({ plot, wallH, ghost }: { plot: Plot; wallH: number; ghost: boolean }) {
+  const hw = plot.w / 2;
+  const hd = plot.d / 2;
+  const frontXs = plot.enterable ? [(-hw - 1.1) / 2, (hw + 1.1) / 2] : [-hw / 2, hw / 2];
+  return (
+    <group>
+      {/* plinth + cornice */}
+      <mesh position={[0, 0.25, 0]}>
+        <boxGeometry args={[plot.w + 0.24, 0.5, plot.d + 0.24]} />
+        <FadeMat ghost={ghost} color="#8a8072" />
+      </mesh>
+      <mesh position={[0, wallH - 0.14, 0]}>
+        <boxGeometry args={[plot.w + 0.36, 0.28, plot.d + 0.36]} />
+        <FadeMat ghost={ghost} color={TRIM} />
+      </mesh>
+      {/* corner boards */}
+      {[
+        [-hw, -hd],
+        [hw, -hd],
+        [-hw, hd],
+        [hw, hd],
+      ].map((c, i) => (
+        <mesh key={i} position={[c[0], wallH / 2, c[1]]}>
+          <boxGeometry args={[0.36, wallH, 0.36]} />
+          <FadeMat ghost={ghost} color={TRIM} />
+        </mesh>
+      ))}
+      {/* front windows */}
+      {frontXs.map((cx, i) => (
+        <WindowUnit key={i} x={cx} z={hd} ghost={ghost} />
+      ))}
+      {/* side windows only for solid (non-enterable) plots */}
+      {!plot.enterable &&
+        [-1, 1].map((s) =>
+          [0].map((_, j) => <WindowUnit key={`${s}${j}`} x={s * hw} z={0} side ghost={ghost} />),
+        )}
+      {plot.enterable ? (
+        /* door canopy over the real opening */
+        <mesh position={[0, 2.95, hd + 0.55]}>
+          <boxGeometry args={[3.0, 0.14, 1.1]} />
+          <FadeMat ghost={ghost} color="#3a3733" />
+        </mesh>
+      ) : (
+        /* recessed entry visual — the wall itself stays solid, matching collision */
+        <group>
+          <mesh position={[0, 1.3, hd + 0.01]}>
+            <boxGeometry args={[2.2, 2.6, 0.1]} />
+            <FadeMat ghost={ghost} color="#2c2620" />
+          </mesh>
+          <mesh position={[0, 0.08, hd + 0.6]}>
+            <boxGeometry args={[2.6, 0.16, 1.2]} />
+            <FadeMat ghost={ghost} color="#8a8478" />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+}
+
 export function PlotShell({ plot, ghost }: { plot: Plot; ghost: boolean }) {
   const boxes = wallBoxes(plot);
   const front = plot.enterable ? boxes.slice(0, 2) : [];
@@ -175,6 +271,10 @@ export function PlotShell({ plot, ghost }: { plot: Plot; ghost: boolean }) {
           <meshStandardMaterial color="#4a4239" roughness={1} />
         </mesh>
       )}
+      {/* finished trim in plot-local frame (front = door side) */}
+      <group position={[plot.x, 0, plot.z]} rotation={[0, yawOfPlot(plot), 0]}>
+        <FacadeDetails plot={plot} wallH={wallH} ghost={ghost} />
+      </group>
       {/* door frame + step */}
       <group position={[doorCX, 0, doorCZ]} rotation={[0, Math.atan2(fx, fz), 0]}>
         {[-1.35, 1.35].map((dx, i) => (

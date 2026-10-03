@@ -90,8 +90,6 @@ export function homeOccluders(): Occluder[] {
   const out: Occluder[] = [];
   for (const b of wallBoxes(HOME_PLOT)) out.push(flat(b, 0, ENTERABLE_WALL_H));
   out.push(roofSlab(HOME_PLOT.id, HOME_PLOT.x, HOME_PLOT.z, HOME_PLOT.w, HOME_PLOT.d, ENTERABLE_WALL_H));
-  out.push(
-    ...furniture({ w: HOME_PLOT.w - 0.7, d: HOME_PLOT.d - 0.7, interior: "apartment", x: HOME_PLOT.x, z: HOME_PLOT.z, facing: HOME_PLOT.facing }),
-  );
+  out.push(...furniture(HOME_PLOT, { w: HOME_PLOT.w - 0.7, d: HOME_PLOT.d - 0.7, interior: "apartment" }));
   return out;
 }
