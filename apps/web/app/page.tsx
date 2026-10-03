@@ -11,6 +11,7 @@ import PresenceList from "@/components/PresenceList";
 import AuthBox from "@/components/AuthBox";
 import ShopPanel from "@/components/ShopPanel";
 import LifePanel from "@/components/LifePanel";
+import BusinessPanel from "@/components/BusinessPanel";
 
 const YabaScene = dynamic(() => import("@/game/world/YabaScene"), { ssr: false });
 
@@ -71,9 +72,10 @@ export default function Home() {
           </div>
         </div>
         <LifePanel refreshKey={walletKey} onMoney={() => setWalletKey((k) => k + 1)} />
+        <BusinessPanel refreshKey={walletKey} onMoney={() => setWalletKey((k) => k + 1)} />
         <div className="rounded-xl border border-zinc-800 p-4 text-sm">
-          <div className="font-semibold mb-1">Phase 4 — economy</div>
-          <p className="text-zinc-400">Register → ₦50,000 starter → walk to a shop → Buy. Server runs one Postgres TX per purchase (lock player + stock, ledger debit/credit, idempotency key). <code>POST /api/purchases</code> · <code>GET /api/wallet</code> · <code>GET /api/shops</code>.</p>
+          <div className="font-semibold mb-1">Phase 6 — businesses</div>
+          <p className="text-zinc-400">Open a business (₦20,000 license) → set prices → restock from the wholesaler at 60% → customers buy (till grows) → hire staff → payroll → withdraw. Closed shops reject buyers; every cash move is a ledger TX.</p>
         </div>
       </main>
     </div>
