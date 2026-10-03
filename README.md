@@ -22,8 +22,8 @@ Browser (Next.js + R3F) -- HTTPS/WS --> Go backend --> PostgreSQL + Redis
 ```bash
 cp .env.example .env
 docker compose -f infra/docker/docker-compose.yml up --build
-# web: http://localhost:3000
-# api: http://localhost:8080/healthz
+# web: http://localhost:3001
+# api: http://localhost:8081/healthz
 ```
 
 Run natively:
