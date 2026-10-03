@@ -34,6 +34,33 @@ export const HOME_PLOT: Plot = (() => {
 /** Interior spawn: just inside the flat's entrance, facing into the room. */
 export const HOME_SPAWN = { x: 0, z: 3.3, heading: Math.PI };
 
+/**
+ * Walkable rectangle of the flat in world coords (walls + body margin already
+ * accounted for). Click destinations are validated against this — clicks
+ * outside never pull the player through a wall.
+ */
+export const HOME_BOUNDS = (() => {
+  const m = 0.9;
+  return {
+    minX: HOME_PLOT.x - (HOME_PLOT.w - 0.7) / 2 + m,
+    maxX: HOME_PLOT.x + (HOME_PLOT.w - 0.7) / 2 - m,
+    minZ: HOME_PLOT.z - (HOME_PLOT.d - 0.7) / 2 + m,
+    maxZ: HOME_PLOT.z + (HOME_PLOT.d - 0.7) / 2 - m,
+  };
+})();
+
+/** The flat's physical exit: front-door gap on the +z face. */
+export const HOME_EXIT = {
+  x: HOME_PLOT.x,
+  z: HOME_PLOT.z + HOME_PLOT.d / 2,
+  halfWidth: 1.0,
+};
+
+/** True once the player has stepped out through the actual doorway. */
+export function hasCrossedHomeExit(x: number, z: number): boolean {
+  return Math.abs(x - HOME_EXIT.x) <= HOME_EXIT.halfWidth && z >= HOME_EXIT.z - 0.4;
+}
+
 /** How far outside the wall face a doorstep spawn sits (player radius 0.5 + margin). */
 export const DOORSTEP_OUT = 2.6;
 

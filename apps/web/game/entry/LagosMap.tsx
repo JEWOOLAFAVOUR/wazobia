@@ -9,6 +9,12 @@ import { Danfo } from "@/game/world/yaba/parts";
 
 export type MapFocus = { x: number; z: number };
 
+const CITY_BOUNDS = { minX: -266, maxX: 370, minZ: -141, maxZ: 340 };
+export const CITY_CENTER = {
+  x: (CITY_BOUNDS.minX + CITY_BOUNDS.maxX) / 2,
+  z: (CITY_BOUNDS.minZ + CITY_BOUNDS.maxZ) / 2,
+};
+
 const KIND_COLOR: Record<string, string> = {
   shop: "#e8b04b",
   restaurant: "#e8b04b",
@@ -30,6 +36,7 @@ export function MapCamera({ focusRef }: { focusRef: React.MutableRefObject<MapFo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controls = useRef<any>(null);
   const camera = useThree((state) => state.camera);
+  const size = useThree((state) => state.size);
   const goal = useRef(new THREE.Vector3());
   const lastFocus = useRef({ x: 0, z: 0 });
   const flying = useRef(false);
@@ -40,15 +47,25 @@ export function MapCamera({ focusRef }: { focusRef: React.MutableRefObject<MapFo
   }, [focusRef]);
 
   useLayoutEffect(() => {
-    const initial = focusRef.current;
-    goal.current.set(initial.x, 0, initial.z);
-    lastFocus.current.x = initial.x;
-    lastFocus.current.z = initial.z;
-    camera.position.set(initial.x + 420, 460, initial.z + 420);
-    camera.lookAt(initial.x, 0, initial.z);
-    controls.current?.target.set(initial.x, 0, initial.z);
+    const target = focusRef.current;
+    const perspectiveCamera = camera as THREE.PerspectiveCamera;
+    const halfFov = THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2;
+    const aspect = size.width / Math.max(1, size.height);
+    const horizontalSpan = (CITY_BOUNDS.maxX - CITY_BOUNDS.minX + CITY_BOUNDS.maxZ - CITY_BOUNDS.minZ) / Math.sqrt(2);
+    const verticalSpan = horizontalSpan * Math.cos(Math.atan2(0.65, Math.sqrt(2) * 0.55));
+    const distance = Math.max(
+      horizontalSpan / (2 * Math.tan(halfFov) * aspect),
+      verticalSpan / (2 * Math.tan(halfFov)),
+    ) * 1.18;
+    goal.current.set(target.x, 0, target.z);
+    lastFocus.current.x = target.x;
+    lastFocus.current.z = target.z;
+    const direction = new THREE.Vector3(0.55, 0.65, 0.55).normalize();
+    camera.position.copy(goal.current).addScaledVector(direction, distance);
+    camera.lookAt(goal.current);
+    controls.current?.target.copy(goal.current);
     controls.current?.update();
-  }, [camera, focusRef]);
+  }, [camera, focusRef, size.width, size.height]);
 
   const onStart = useCallback(() => {
     userInteracting.current = true;
@@ -92,7 +109,7 @@ export function MapCamera({ focusRef }: { focusRef: React.MutableRefObject<MapFo
       dampingFactor={0.12}
       screenSpacePanning={false}
       minDistance={18}
-      maxDistance={920}
+      maxDistance={3000}
       maxPolarAngle={Math.PI / 3.2}
       mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }}
@@ -120,13 +137,12 @@ const CITY_ROADS: RoadSpec[] = [
   { id: "vi-north", axis: "x", center: 88, width: 7, from: -92, to: 66, main: false },
   { id: "vi-middle", axis: "x", center: 112, width: 6, from: -92, to: 66, main: false },
   { id: "vi-south", axis: "x", center: 138, width: 8, from: -92, to: 66, main: true },
-  { id: "lekki-west", axis: "z", center: 92, width: 10, from: 68, to: 260, main: true },
-  { id: "lekki-middle", axis: "z", center: 132, width: 5, from: 68, to: 260, main: false },
-  { id: "lekki-east", axis: "z", center: 174, width: 7, from: 68, to: 260, main: true },
-  { id: "lekki-coastal-link", axis: "z", center: 238, width: 8, from: 68, to: 215, main: true },
-  { id: "lekki-north", axis: "x", center: 88, width: 6, from: 68, to: 260, main: false },
-  { id: "lekki-centre", axis: "x", center: 132, width: 9, from: 68, to: 260, main: true },
-  { id: "lekki-south", axis: "x", center: 174, width: 7, from: 68, to: 260, main: true },
+  { id: "lekki-west", axis: "z", center: 92, width: 10, from: 80, to: 174, main: true },
+  { id: "lekki-middle", axis: "z", center: 132, width: 5, from: 76, to: 200, main: false },
+  { id: "lekki-east", axis: "z", center: 174, width: 7, from: 88, to: 212, main: true },
+  { id: "lekki-coastal-link", axis: "z", center: 238, width: 8, from: 92, to: 215, main: true },
+  { id: "lekki-north", axis: "x", center: 88, width: 6, from: 80, to: 192, main: false },
+  { id: "lekki-centre", axis: "x", center: 132, width: 9, from: 68, to: 282, main: true },
   { id: "mainland-local-north", axis: "x", center: -43, width: 3.2, from: -150, to: 150, main: false },
   { id: "mainland-local-mid", axis: "x", center: -20, width: 3.2, from: -150, to: 150, main: false },
   { id: "mainland-local-south", axis: "x", center: 20, width: 3.2, from: -150, to: 150, main: false },
@@ -136,6 +152,16 @@ const CITY_ROADS: RoadSpec[] = [
   { id: "island-local-south", axis: "x", center: 126, width: 3.2, from: -96, to: 68, main: false },
   { id: "island-local-west", axis: "z", center: -48, width: 3.2, from: 82, to: 142, main: false },
   { id: "island-local-east", axis: "z", center: 44, width: 3.2, from: 82, to: 142, main: false },
+  { id: "apapa-port-road", axis: "x", center: -60, width: 10, from: -265, to: -150, main: true },
+  { id: "apapa-dock-road", axis: "x", center: -5, width: 6, from: -255, to: -175, main: false },
+  { id: "apapa-west-link", axis: "z", center: -254, width: 7, from: -72, to: 35, main: true },
+  { id: "apapa-east-link", axis: "z", center: -190, width: 5, from: -78, to: 34, main: false },
+  { id: "ajah-epe-expressway", axis: "x", center: 174, width: 12, from: 90, to: 340, main: true },
+  { id: "ajah-local-north", axis: "x", center: 150, width: 4, from: 270, to: 338, main: false },
+  { id: "ajah-local-south", axis: "x", center: 211, width: 4, from: 270, to: 360, main: false },
+  { id: "ajah-west", axis: "z", center: 282, width: 6, from: 130, to: 254, main: false },
+  { id: "ajah-centre", axis: "z", center: 322, width: 8, from: 141, to: 254, main: true },
+  { id: "ajah-east", axis: "z", center: 364, width: 5, from: 192, to: 228, main: false },
 ];
 
 function landGeometry(points: [number, number][]): THREE.ShapeGeometry {
@@ -153,18 +179,23 @@ const MAINLAND_GEOMETRY = landGeometry([
   [157, -100], [148, -77], [158, -49], [150, -18], [157, 8], [144, 38], [125, 55],
   [72, 59], [8, 53], [-66, 60], [-132, 53], [-157, 36], [-150, 8], [-160, -24], [-149, -60], [-158, -91],
 ]);
+const APAPA_GEOMETRY = landGeometry([
+  [-176, -80], [-205, -85], [-240, -64], [-263, -32], [-266, 4],
+  [-253, 28], [-230, 43], [-202, 47], [-177, 36],
+]);
 const ISLAND_GEOMETRY = landGeometry([
   [-113, 81], [-105, 94], [-108, 119], [-99, 145], [-80, 164], [-51, 170], [-28, 160],
   [4, 170], [35, 160], [59, 158], [79, 141], [75, 105], [61, 88], [39, 80], [2, 76], [-38, 79], [-76, 76],
 ]);
 const EKO_GEOMETRY = landGeometry([
-  [-158, 84], [-104, 87], [-98, 102], [-102, 127], [-111, 146], [-137, 158], [-160, 146], [-166, 121],
+  [-158, 84], [-121, 87], [-113, 102], [-113, 127], [-121, 146], [-137, 158], [-160, 146], [-166, 121],
 ]);
 const LEKKI_GEOMETRY = landGeometry([
-  [48, 78], [68, 73], [92, 81], [112, 72], [140, 78], [163, 88], [190, 87],
-  [225, 90], [252, 105], [270, 126], [276, 151], [267, 176], [270, 196],
-  [250, 218], [221, 222], [196, 218], [170, 210], [140, 202], [110, 190],
-  [91, 174], [77, 151], [67, 125], [56, 108],
+  [80, 78], [92, 81], [112, 72], [140, 78], [163, 88], [190, 87],
+  [225, 90], [252, 105], [270, 126], [303, 130], [329, 145], [350, 166],
+  [364, 192], [370, 219], [359, 245], [339, 263], [310, 270], [282, 253],
+  [270, 218], [250, 218], [221, 222], [196, 218], [170, 210], [140, 202], [110, 190],
+  [91, 174], [84, 151], [81, 125], [79, 108],
 ]);
 
 function RoadStrip({ road, elevation = 0.18 }: { road: RoadSpec; elevation?: number }) {
@@ -212,7 +243,7 @@ function RoadStrip({ road, elevation = 0.18 }: { road: RoadSpec; elevation?: num
   );
 }
 
-type LandmarkKind = "dining" | "office" | "hub" | "nightlife" | "beach" | "event" | "culture" | "nature" | "education" | "retail";
+type LandmarkKind = "dining" | "office" | "hub" | "nightlife" | "beach" | "event" | "culture" | "nature" | "education" | "retail" | "industrial";
 type Landmark = {
   name: string;
   district: string;
@@ -260,6 +291,16 @@ const LANDMARKS: Landmark[] = [
   { name: "Lekki Conservation Centre", district: "Lekki", category: "Nature & canopy walk", kind: "nature", x: 220, z: 180, w: 24, d: 22, h: 7, color: "#b8c69b", accent: "#3e8055", featured: true },
   { name: "The Palms Mall", district: "Lekki", category: "Shopping & cinema", kind: "retail", x: 220, z: 153, w: 30, d: 22, h: 12, color: "#cfd5d2", accent: "#5597aa" },
   { name: "Tarkwa Bay", district: "Lagos Coast", category: "Island beach", kind: "beach", x: -164, z: 190, w: 21, d: 17, h: 5, color: "#e4cf9e", accent: "#347fa0" },
+  { name: "Apapa Port Complex", district: "Apapa", category: "Cargo & shipping", kind: "industrial", x: -219, z: -30, w: 35, d: 27, h: 11, color: "#aeb3ab", accent: "#df9c35", featured: true },
+  { name: "Tin Can Island Port", district: "Apapa", category: "Container terminal", kind: "industrial", x: -222, z: 14, w: 31, d: 24, h: 9, color: "#b7b6aa", accent: "#d34c37" },
+  { name: "GTCO Place", district: "Ajah", category: "Corporate headquarters", kind: "office", x: 303, z: 137, w: 21, d: 14, h: 31, color: "#d5dad9", accent: "#dd5c3d", featured: true },
+  { name: "FirstBank Business Centre", district: "Ajah", category: "Corporate offices", kind: "office", x: 340, z: 137, w: 18, d: 14, h: 26, color: "#c9d2d8", accent: "#3978ad" },
+  { name: "Novare Lekki Mall", district: "Sangotedo", category: "Shopping & cinema", kind: "retail", x: 300, z: 194, w: 29, d: 22, h: 11, color: "#d5d8d3", accent: "#4c92a4", featured: true },
+  { name: "Pan-Atlantic University", district: "Ibeju-Lekki", category: "University campus", kind: "education", x: 342, z: 194, w: 25, d: 21, h: 13, color: "#ddd3b7", accent: "#48805b" },
+  { name: "Lekki Free Trade Zone", district: "Ibeju-Lekki", category: "Industry & logistics", kind: "industrial", x: 343, z: 235, w: 25, d: 25, h: 10, color: "#b4b5ad", accent: "#db9d3c" },
+  { name: "Victoria Garden City", district: "Ajah", category: "Gated residential estate", kind: "retail", x: 298, z: 234, w: 18, d: 14, h: 8, color: "#d6d0bd", accent: "#568451" },
+  { name: "Sangotedo Business Park", district: "Sangotedo", category: "Commercial offices", kind: "office", x: 340, z: 160, w: 24, d: 12, h: 24, color: "#c8d3d2", accent: "#5f9ea0" },
+  { name: "Eko Pearl Towers", district: "Eko Atlantic", category: "Residential high-rise", kind: "office", x: -139, z: 124, w: 21, d: 20, h: 42, color: "#cbd7d8", accent: "#4a9ba6", featured: true },
 ];
 
 function houseGrid(x0: number, z0: number, cols: number, rows: number, dx: number, dz: number, seed: number): House[] {
@@ -283,7 +324,7 @@ function houseGrid(x0: number, z0: number, cols: number, rows: number, dx: numbe
   return houses;
 }
 
-function buildEstates(): { mainland: House[]; island: House[]; lekki: House[] } {
+function buildEstates(): { mainland: House[]; island: House[]; lekki: House[]; ajah: House[] } {
   return {
     mainland: [
       ...houseGrid(-143, -123, 7, 3, 6.5, 7.2, 1),
@@ -307,7 +348,8 @@ function buildEstates(): { mainland: House[]; island: House[]; lekki: House[] } 
       ...houseGrid(-24, 91, 7, 5, 6.4, 7.2, 40),
       ...houseGrid(-94, 132, 6, 3, 6.4, 7.2, 44),
     ],
-    lekki: houseGrid(88, 92, 13, 9, 6.7, 7.3, 48),
+    lekki: houseGrid(88, 92, 13, 7, 6.7, 7.3, 48),
+    ajah: houseGrid(248, 239, 7, 2, 6.6, 7.2, 76),
   };
 }
 
@@ -423,20 +465,12 @@ function CompoundWall({ x, z, w, d }: { x: number; z: number; w: number; d: numb
 }
 
 function LandmarkBuilding({ place }: { place: Landmark }) {
-  const camera = useThree((state) => state.camera);
-  const label = useRef<HTMLDivElement>(null);
-  const labelPosition = useMemo(() => new THREE.Vector3(place.x, place.h + 2.4, place.z), [place]);
   const columns = Math.max(3, Math.floor(place.w / 4));
   const floors = Math.max(1, Math.floor((place.h - 1) / 2.8));
   const glass = place.kind === "nightlife" ? "#443c54" : "#52747a";
   const isPavilion = place.kind === "beach";
   const isGlass = place.kind === "office" || place.kind === "hub" || place.kind === "event" || place.kind === "retail";
-
-  useFrame(() => {
-    if (!label.current || place.featured) return;
-    const showLabel = camera.position.distanceToSquared(labelPosition) < 430 * 430;
-    label.current.style.visibility = showLabel ? "visible" : "hidden";
-  });
+  const isWideVenue = place.kind === "event" || place.kind === "industrial" || place.kind === "retail";
 
   return (
     <group position={[place.x, 0, place.z]}>
@@ -464,6 +498,115 @@ function LandmarkBuilding({ place }: { place: Landmark }) {
         <boxGeometry args={[place.w + (isPavilion ? 4 : 1.5), 0.65, place.d + (isPavilion ? 4 : 1.5)]} />
         <meshStandardMaterial color={place.accent} roughness={0.82} />
       </mesh>
+      <mesh position={[0, place.h + 1.65, 0]}>
+        <cylinderGeometry args={[0.025, 0.025, 1.7, 5]} />
+        <meshBasicMaterial color={place.accent} />
+      </mesh>
+      {place.kind === "office" && (
+        <>
+          <mesh position={[-place.w * 0.31, place.h * 0.56, 0]}>
+            <boxGeometry args={[place.w * 0.16, place.h * 0.72, place.d * 0.88]} />
+            <meshStandardMaterial color={place.color} roughness={0.55} metalness={0.16} />
+          </mesh>
+          {[-1, 1].map((side) => (
+            <mesh key={side} position={[side * place.w * 0.46, place.h * 0.49, place.d / 2 + 0.16]}>
+              <boxGeometry args={[0.42, place.h * 0.86, 0.18]} />
+              <meshStandardMaterial color={place.accent} roughness={0.65} metalness={0.1} />
+            </mesh>
+          ))}
+          <mesh position={[0, place.h + 2.8, 0]}>
+            <boxGeometry args={[place.w * 0.42, 4.6, place.d * 0.48]} />
+            <meshStandardMaterial color={glass} roughness={0.3} metalness={0.2} />
+          </mesh>
+        </>
+      )}
+      {place.kind === "industrial" && (
+        <>
+          {Array.from({ length: 4 }, (_, index) => (
+            <mesh
+              key={index}
+              position={[-place.w * 0.32 + index * 4.3, 1.1, -place.d / 2 - 2.5]}
+            >
+              <boxGeometry args={[3.8, 2.2, 4]} />
+              <meshStandardMaterial color={index % 2 ? "#b74c35" : "#376c79"} roughness={0.88} />
+            </mesh>
+          ))}
+          <mesh position={[0, place.h + 4, -place.d * 0.34]}>
+            <boxGeometry args={[place.w * 0.82, 0.5, 0.55]} />
+            <meshStandardMaterial color="#df9c35" roughness={0.8} />
+          </mesh>
+          {[-1, 1].map((side) => (
+            <mesh key={side} position={[side * place.w * 0.36, place.h / 2 + 2, -place.d * 0.34]}>
+              <boxGeometry args={[0.5, place.h + 4, 0.55]} />
+              <meshStandardMaterial color="#8a8172" roughness={0.9} />
+            </mesh>
+          ))}
+        </>
+      )}
+      {place.kind === "hub" && (
+        <>
+          <mesh position={[place.w * 0.3, place.h * 0.34, 0]}>
+            <boxGeometry args={[place.w * 0.3, place.h * 0.66, place.d * 0.78]} />
+            <meshStandardMaterial color="#b7cbc7" roughness={0.55} metalness={0.12} />
+          </mesh>
+          <mesh position={[0, 1.5, place.d / 2 + 2.2]}>
+            <boxGeometry args={[place.w * 0.74, 2.8, 0.25]} />
+            <meshStandardMaterial color={place.accent} roughness={0.75} />
+          </mesh>
+        </>
+      )}
+      {place.kind === "event" && (
+        <mesh position={[0, place.h * 0.72, place.d / 2 + 0.2]}>
+          <boxGeometry args={[place.w * 0.76, 1.1, 0.18]} />
+          <meshStandardMaterial color="#56666a" roughness={0.4} metalness={0.16} />
+        </mesh>
+      )}
+      {place.kind === "education" && (
+        <>
+          <mesh position={[place.w * 0.38, place.h / 2, -place.d * 0.1]}>
+            <boxGeometry args={[place.w * 0.18, place.h + 2, place.d * 0.85]} />
+            <meshStandardMaterial color={place.accent} roughness={0.9} />
+          </mesh>
+          <mesh position={[place.w * 0.38, place.h + 2, -place.d * 0.1]}>
+            <boxGeometry args={[4, 2, 4]} />
+            <meshStandardMaterial color="#e8dfca" roughness={0.9} />
+          </mesh>
+        </>
+      )}
+      {place.kind === "retail" && (
+        <>
+          <mesh position={[0, place.h + 2.1, 0]}>
+            <boxGeometry args={[place.w * 0.78, 2.2, place.d * 0.72]} />
+            <meshStandardMaterial color="#e4e2d9" roughness={0.6} metalness={0.08} />
+          </mesh>
+          {[-1, 1].map((side) => (
+            <mesh key={side} position={[side * place.w * 0.42, place.h / 2, place.d / 2 + 0.18]}>
+              <boxGeometry args={[0.7, place.h * 0.82, 0.22]} />
+              <meshStandardMaterial color={place.accent} roughness={0.75} />
+            </mesh>
+          ))}
+        </>
+      )}
+      {place.kind === "dining" && (
+        <>
+          <mesh position={[0, 2.9, place.d / 2 + 2.35]}>
+            <boxGeometry args={[place.w * 0.84, 0.28, 4.8]} />
+            <meshStandardMaterial color={place.accent} roughness={0.85} />
+          </mesh>
+          {[-1, 1].map((side) => (
+            <mesh key={side} position={[side * place.w * 0.34, 1.55, place.d / 2 + 2.25]}>
+              <boxGeometry args={[0.32, 2.7, 0.32]} />
+              <meshStandardMaterial color="#eee0c5" roughness={0.9} />
+            </mesh>
+          ))}
+        </>
+      )}
+      {isWideVenue && (
+        <mesh position={[0, place.h + 0.95, 0]}>
+          <boxGeometry args={[place.w * 0.82, 0.18, place.d * 0.82]} />
+          <meshStandardMaterial color="#ede7d8" roughness={0.9} />
+        </mesh>
+      )}
       {(place.kind === "dining" || place.kind === "hub" || place.kind === "event") && (
         <mesh position={[0, 1.35, place.d / 2 + 2]}>
           <boxGeometry args={[place.w * 0.68, 0.28, 4]} />
@@ -490,35 +633,25 @@ function LandmarkBuilding({ place }: { place: Landmark }) {
       )}
       <Html
         center
-        position={[0, place.h + 2.4, 0]}
-        distanceFactor={180}
+        position={[0, place.h + 2.65, 0]}
         wrapperClass="venue-label"
         style={{ pointerEvents: "none" }}
       >
         <div
           style={{
-            display: "grid",
-            gap: 1,
-            padding: "4px 8px",
-            borderRadius: 7,
-            borderLeft: `3px solid ${place.accent}`,
-            background: "rgba(24,31,34,0.92)",
-            boxShadow: "0 2px 8px rgba(0,0,0,.3)",
-            color: "white",
+            color: "#fffdf1",
             fontSize: 9,
             fontWeight: 800,
-            lineHeight: 1.2,
-            letterSpacing: "0.02em",
-            textAlign: "left",
+            lineHeight: 1,
+            letterSpacing: "0.01em",
+            textAlign: "center",
             whiteSpace: "nowrap",
             pointerEvents: "none",
             userSelect: "none",
+            textShadow: "0 1px 2px #26332b, 0 0 4px #26332b",
           }}
         >
-          <span ref={label}>{place.name}</span>
-          <span style={{ color: "#f1c989", fontSize: 7, fontWeight: 600 }}>
-            {place.category} · {place.district}
-          </span>
+          {place.name}
         </div>
       </Html>
     </group>
@@ -671,13 +804,26 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
         </mesh>
       ))}
       {/* connected, marked streets and the existing playable Yaba roads */}
-      {cityRoads.map((road, index) => <RoadStrip key={road.id} road={road} elevation={0.17 + index * 0.0005} />)}
-      {roads.map((road, index) => <RoadStrip key={road.id} road={road} elevation={0.21 + index * 0.001} />)}
+      <mesh geometry={APAPA_GEOMETRY} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.13, 0]}>
+        <meshStandardMaterial color="#c6b995" roughness={1} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-220, 0.145, 56]}>
+        <planeGeometry args={[76, 12]} />
+        <meshStandardMaterial color="#478eaa" roughness={0.85} />
+      </mesh>
+      {/* fixed height ordering prevents coplanar road crossings from shimmering */}
+      {cityRoads.map((road) => (
+        <RoadStrip key={road.id} road={road} elevation={road.axis === "x" ? 0.18 : 0.215} />
+      ))}
+      {roads.map((road) => (
+        <RoadStrip key={road.id} road={road} elevation={road.axis === "x" ? 0.255 : 0.29} />
+      ))}
       {[-110, 0, 110].map((x) => <Bridge key={x} x={x} />)}
       {/* compounds and detached homes */}
       <EstateInstances houses={estates.mainland} />
       <EstateInstances houses={estates.island} />
       <EstateInstances houses={estates.lekki} />
+      <EstateInstances houses={estates.ajah} />
       {LANDMARKS.map((place) => <LandmarkBuilding key={`${place.name}-${place.district}`} place={place} />)}
       {[
         [-111, -115, 27, 21],
@@ -748,7 +894,9 @@ export function LagosMapBlocks({ onPick }: { onPick?: (plotId: string) => void }
       <RegionLabel position={[-24, 0.5, 142]}>VICTORIA ISLAND</RegionLabel>
       <RegionLabel position={[145, 0.5, 174]}>LEKKI</RegionLabel>
       <RegionLabel position={[-126, 0.5, 160]}>EKO ATLANTIC</RegionLabel>
-      <RegionLabel position={[225, 0.5, 215]}>LEKKI · AJAH</RegionLabel>
+      <RegionLabel position={[228, 0.5, 215]}>LEKKI · AJAH</RegionLabel>
+      <RegionLabel position={[-222, 0.5, 44]}>APAPA PORT</RegionLabel>
+      <RegionLabel position={[324, 0.5, 253]}>SANGOTEDO · IBEJU-LEKKI</RegionLabel>
     </group>
   );
 }

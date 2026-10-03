@@ -22,7 +22,7 @@ import {
 import { BUILDING_COLLIDERS, DOOR_INTERACTABLES, streetPieces, wallBoxes } from "./derive";
 import { ApartmentInterior, RestaurantInterior, ShopInterior, interiorColliders, interiorSpots, localBoxToWorld, localToWorld } from "./interiors";
 import { yawOfPlot } from "./interiorLayout";
-import { Danfo, Sign, StreetTree, UtilityPole } from "./parts";
+import { Sign, StreetTree, UtilityPole } from "./parts";
 import type { Interactable } from "../YabaBlock";
 
 export type HoodData = { colliders: Box[]; spots: Interactable[] };
@@ -504,7 +504,6 @@ export default function YabaHood({ insideId }: { insideId: string | null }) {
           <meshStandardMaterial color="#5a3a24" roughness={0.9} />
         </mesh>
       </group>
-      <Danfo position={[20, 0, 2.2]} rotationY={Math.PI / 2} />
     </group>
   );
 }

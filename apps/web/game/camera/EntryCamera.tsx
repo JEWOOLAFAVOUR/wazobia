@@ -21,20 +21,25 @@ export default function EntryCamera({
   posRef,
   occluders,
   maxPitch = 1.1,
+  initialDist = 7,
+  initialPitch = 0.42,
 }: {
   posRef: React.MutableRefObject<EntryPos>;
   occluders?: Occluder[];
   /** Higher values allow a dollhouse top-down view (home interiors). */
   maxPitch?: number;
+  /** Per-scene framing: home uses a pulled-back isometric-style default. */
+  initialDist?: number;
+  initialPitch?: number;
 }) {
   const { camera, gl } = useThree();
   const look = useRef(new THREE.Vector3());
-  const orbit = useRef({ yaw: Math.PI, pitch: 0.42, dist: 7 });
+  const orbit = useRef({ yaw: Math.PI, pitch: initialPitch, dist: initialDist });
   const pitchMax = useRef(maxPitch);
   useEffect(() => {
     pitchMax.current = maxPitch;
   }, [maxPitch]);
-  const effDist = useRef(7);
+  const effDist = useRef(initialDist);
   const boxes = useRef<Occluder[]>(occluders ?? []);
   useEffect(() => {
     boxes.current = occluders ?? [];

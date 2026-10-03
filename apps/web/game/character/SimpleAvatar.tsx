@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { HAIR_COLORS, SKIN_TONES } from "./appearance";
@@ -15,11 +15,19 @@ function mat(color: string, roughness = 0.85): THREE.MeshStandardMaterial {
 }
 
 /** Simple stylized Lagos person — capsule body, sphere head, separate
- *  clothing pieces. Zero downloads, matches the in-world characters. */
-export function SimpleAvatar({ avatar }: { avatar: Avatar }) {
+ *  clothing pieces. Zero downloads, matches the in-world characters.
+ *  `moving` switches the idle sway to a walk cycle (arm/leg swing + bob). */
+export function SimpleAvatar({ avatar, moving = false }: { avatar: Avatar; moving?: boolean }) {
   const root = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
   const armR = useRef<THREE.Group>(null);
+  const legL = useRef<THREE.Group>(null);
+  const legR = useRef<THREE.Group>(null);
+  const phase = useRef(0);
+  const movingRef = useRef(moving);
+  useEffect(() => {
+    movingRef.current = moving;
+  }, [moving]);
 
   const female = avatar.body === "female";
   const s = female ? 0.88 : 0.92; // overall scale
@@ -30,11 +38,21 @@ export function SimpleAvatar({ avatar }: { avatar: Avatar }) {
   const pants = avatar.bottom?.color ?? "#2f4a6b";
   const shoeC = avatar.shoes?.color ?? "#eceae6";
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, rawDt) => {
+    const dt = Math.min(rawDt ?? 0.016, 0.05);
     const t = clock.elapsedTime;
-    if (root.current) root.current.position.y = Math.sin(t * 2.1) * 0.022;
-    if (armL.current) armL.current.rotation.x = Math.sin(t * 2.1) * 0.07;
-    if (armR.current) armR.current.rotation.x = Math.sin(t * 2.1 + Math.PI) * 0.07;
+    const walk = movingRef.current;
+    if (walk) phase.current += dt * 8.5;
+    const stride = walk ? Math.sin(phase.current) * 0.55 : 0;
+    const sway = walk ? 0 : Math.sin(t * 2.1) * 0.07;
+    if (root.current) {
+      root.current.position.y = walk ? Math.abs(Math.cos(phase.current)) * 0.045 : Math.sin(t * 2.1) * 0.022;
+      root.current.rotation.x = walk ? 0.07 : 0;
+    }
+    if (armL.current) armL.current.rotation.x = walk ? -stride : sway;
+    if (armR.current) armR.current.rotation.x = walk ? stride : -sway;
+    if (legL.current) legL.current.rotation.x = walk ? stride * 0.9 : 0;
+    if (legR.current) legR.current.rotation.x = walk ? -stride * 0.9 : 0;
   });
 
   const longSleeve = avatar.top != null && (avatar.top.id === "longsleeve" || avatar.top.id === "native");
@@ -43,44 +61,51 @@ export function SimpleAvatar({ avatar }: { avatar: Avatar }) {
 
   return (
     <group ref={root} scale={s}>
-      {/* legs */}
+      {/* legs — each side swings from a hip pivot when walking */}
       {skirt ? (
         <>
           <mesh position={[0, 0.62, 0]} material={mat(pants)}>
             <cylinderGeometry args={[0.17, 0.27, 0.52, 14]} />
           </mesh>
           {[-1, 1].map((side) => (
-            <mesh key={side} position={[side * 0.1, 0.28, 0]} material={mat(skin)}>
-              <capsuleGeometry args={[0.07, 0.3, 4, 10]} />
-            </mesh>
+            <group key={side} ref={side < 0 ? legL : legR} position={[side * 0.1, 0.5, 0]}>
+              <mesh position={[0, -0.22, 0]} material={mat(skin)}>
+                <capsuleGeometry args={[0.07, 0.3, 4, 10]} />
+              </mesh>
+              <mesh position={[0, -0.455, 0.045]} material={mat(shoeC, 0.6)}>
+                <boxGeometry args={[0.11, 0.09, 0.26]} />
+              </mesh>
+            </group>
           ))}
         </>
       ) : shorts ? (
         <>
           {[-1, 1].map((side) => (
-            <group key={side}>
-              <mesh position={[side * 0.105, 0.66, 0]} material={mat(pants)}>
+            <group key={side} ref={side < 0 ? legL : legR} position={[side * 0.105, 0.78, 0]}>
+              <mesh position={[0, -0.12, 0]} material={mat(pants)}>
                 <capsuleGeometry args={[0.085, 0.22, 4, 10]} />
               </mesh>
-              <mesh position={[side * 0.105, 0.3, 0]} material={mat(skin)}>
+              <mesh position={[0, -0.48, 0]} material={mat(skin)}>
                 <capsuleGeometry args={[0.068, 0.26, 4, 10]} />
+              </mesh>
+              <mesh position={[0, -0.735, 0.045]} material={mat(shoeC, 0.6)}>
+                <boxGeometry args={[0.11, 0.09, 0.26]} />
               </mesh>
             </group>
           ))}
         </>
       ) : (
         [-1, 1].map((side) => (
-          <mesh key={side} position={[side * 0.105, 0.44, 0]} material={mat(pants)}>
-            <capsuleGeometry args={[0.085, 0.6, 4, 10]} />
-          </mesh>
+          <group key={side} ref={side < 0 ? legL : legR} position={[side * 0.105, 0.78, 0]}>
+            <mesh position={[0, -0.34, 0]} material={mat(pants)}>
+              <capsuleGeometry args={[0.085, 0.6, 4, 10]} />
+            </mesh>
+            <mesh position={[0, -0.735, 0.045]} material={mat(shoeC, 0.6)}>
+              <boxGeometry args={[0.11, 0.09, 0.26]} />
+            </mesh>
+          </group>
         ))
       )}
-      {/* shoes */}
-      {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * 0.105, 0.045, 0.045]} material={mat(shoeC, 0.6)}>
-          <boxGeometry args={[0.11, 0.09, 0.26]} />
-        </mesh>
-      ))}
       {/* torso */}
       <mesh position={[0, 1.04, 0]} material={mat(shirt)}>
         <capsuleGeometry args={[female ? 0.155 : 0.17, 0.5, 6, 14]} />

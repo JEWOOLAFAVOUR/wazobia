@@ -5,7 +5,8 @@
 // Local frame: x in [-w/2, w/2], z in [-d/2, d/2], front (door side) at +z.
 // Colliders + spots are derived from the same local specs as the visuals.
 
-import type { ThreeEvent } from "@react-three/fiber";
+import { useRef } from "react";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import type * as THREE from "three";
 import type { Plot } from "./layout";
 import { yawOfPlot } from "./interiorLayout";
@@ -26,19 +27,27 @@ function Slab({
   d,
   color = "#b8a88e",
   floorMap,
+  floorRoughness,
   onFloorClick,
 }: {
   w: number;
   d: number;
   color?: string;
   floorMap?: THREE.Texture;
+  floorRoughness?: THREE.Texture;
   onFloorClick?: (x: number, z: number) => void;
 }) {
+  // One texture block (4 tiles) per ~2.4m → honest 0.6m household tiles at any room size.
+  const repeat = { x: Math.max(1, Math.round(w / 2.4)), y: Math.max(1, Math.round(d / 2.4)) };
   const map = floorMap?.clone();
   if (map) {
-    // One texture repeat per ~3.2m so tiles read at a believable scale.
-    map.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(d / 3.2)));
+    map.repeat.set(repeat.x, repeat.y);
     map.needsUpdate = true;
+  }
+  const rough = floorRoughness?.clone();
+  if (rough) {
+    rough.repeat.set(repeat.x, repeat.y);
+    rough.needsUpdate = true;
   }
   return (
     <mesh
@@ -52,7 +61,7 @@ function Slab({
       }}
     >
       <planeGeometry args={[w, d]} />
-      <meshStandardMaterial color={color} roughness={0.85} map={map ?? undefined} />
+      <meshStandardMaterial color={color} roughness={0.9} map={map ?? undefined} roughnessMap={rough ?? undefined} />
     </mesh>
   );
 }
@@ -205,12 +214,140 @@ function Partition({ x, z, w, h = 2.7 }: { x: number; z: number; w: number; h?: 
   );
 }
 
-export function ApartmentInterior({ plot }: { plot: Plot }) {
+/** Skirting board run in plot-local frame. */
+function Skirting({ x, z, len, alongX = true }: { x: number; z: number; len: number; alongX?: boolean }) {
+  return (
+    <mesh position={[x, 0.12, z]}>
+      <boxGeometry args={alongX ? [len, 0.24, 0.08] : [0.08, 0.24, len]} />
+      <meshStandardMaterial color="#efe7d6" roughness={0.9} />
+    </mesh>
+  );
+}
+
+const BOOK_COLORS = ["#a83a32", "#274b73", "#d9a62e", "#2e6b46", "#5b3a75", "#c96a2c", "#eceae6"];
+
+/** Bookshelf with filled shelves — sits against the rear wall. */
+function Bookshelf({ x, z }: { x: number; z: number }) {
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <boxGeometry args={[2.6, 1.8, 0.6]} />
+        <meshStandardMaterial color="#4a3826" roughness={0.9} />
+      </mesh>
+      {[0.45, 0.95, 1.42].map((y, r) => (
+        <group key={r} position={[0, y, 0.31]}>
+          {Array.from({ length: 9 }, (_, i) => (
+            <mesh key={i} position={[-1.05 + i * 0.26, 0.16, 0]}>
+              <boxGeometry args={[0.2, 0.42 - ((i * 3 + r) % 3) * 0.06, 0.18]} />
+              <meshStandardMaterial color={BOOK_COLORS[(r * 3 + i) % BOOK_COLORS.length]} roughness={0.85} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Corner plant: terracotta pot + leafy spheres. */
+function Plant({ x, z }: { x: number; z: number }) {
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 0.25, 0]} castShadow>
+        <cylinderGeometry args={[0.26, 0.32, 0.5, 10]} />
+        <meshStandardMaterial color="#a85f36" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.52, 0]}>
+        <cylinderGeometry args={[0.24, 0.24, 0.06, 10]} />
+        <meshStandardMaterial color="#3a2c20" roughness={1} />
+      </mesh>
+      {[
+        [0, 0.95, 0, 0.3],
+        [0.2, 0.78, 0.1, 0.22],
+        [-0.2, 0.8, -0.08, 0.24],
+        [0.05, 1.15, -0.05, 0.2],
+      ].map((p, i) => (
+        <mesh key={i} position={[p[0], p[1], p[2]]} castShadow>
+          <sphereGeometry args={[p[3], 8, 8]} />
+          <meshStandardMaterial color={i % 2 ? "#2e6b46" : "#3f7d4e"} roughness={1} flatShading />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Flat wall art on the rear wall. */
+function ArtFrame({ x, y, z, c1, c2 }: { x: number; y: number; z: number; c1: string; c2: string }) {
+  return (
+    <group position={[x, y, z]}>
+      <mesh>
+        <boxGeometry args={[1.1, 0.9, 0.06]} />
+        <meshStandardMaterial color="#3a2e22" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0, 0.035]}>
+        <boxGeometry args={[0.94, 0.74, 0.02]} />
+        <meshStandardMaterial color={c1} roughness={0.9} />
+      </mesh>
+      <mesh position={[0.12, 0.08, 0.05]}>
+        <boxGeometry args={[0.4, 0.34, 0.02]} />
+        <meshStandardMaterial color={c2} roughness={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Slow ceiling fan — the room's one animated fixture. */
+function CeilingFan({ x, z }: { x: number; z: number }) {
+  const blades = useRef<THREE.Group>(null);
+  useFrame((_, rawDt) => {
+    if (blades.current) blades.current.rotation.y += Math.min(rawDt, 0.05) * 2.4;
+  });
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 3.35, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.5, 8]} />
+        <meshStandardMaterial color="#2a2725" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 3.06, 0]}>
+        <sphereGeometry args={[0.12, 10, 10]} />
+        <meshStandardMaterial color="#3d3a45" roughness={0.6} />
+      </mesh>
+      <group ref={blades} position={[0, 3.0, 0]}>
+        {[0, 1, 2, 3].map((i) => {
+          const a = (i * Math.PI) / 2;
+          return (
+            <mesh key={i} position={[Math.cos(a) * 0.72, 0, Math.sin(a) * 0.72]} rotation={[0, -a, 0]}>
+              <boxGeometry args={[1.25, 0.035, 0.2]} />
+              <meshStandardMaterial color="#5a4a33" roughness={0.8} />
+            </mesh>
+          );
+        })}
+      </group>
+    </group>
+  );
+}
+
+export function ApartmentInterior({
+  plot,
+  floorMap,
+  floorRoughness,
+  onFloorClick,
+}: {
+  plot: Plot;
+  floorMap?: THREE.Texture;
+  floorRoughness?: THREE.Texture;
+  onFloorClick?: (x: number, z: number) => void;
+}) {
   const w = plot.w - 0.7;
   const d = plot.d - 0.7;
   return (
     <InteriorGroup plot={plot}>
-      <Slab w={w} d={d} color="#c4b49a" />
+      <Slab w={w} d={d} color={floorMap ? "#ffffff" : "#c4b49a"} floorMap={floorMap} floorRoughness={floorRoughness} onFloorClick={onFloorClick} />
+      {/* skirting along the interior wall bases (front split around the door) */}
+      <Skirting x={-(1.2 + (w / 2 - 1.2) / 2)} z={d / 2 - 0.2} len={w / 2 - 1.2} />
+      <Skirting x={(1.2 + (w / 2 - 1.2) / 2)} z={d / 2 - 0.2} len={w / 2 - 1.2} />
+      <Skirting x={0} z={-d / 2 + 0.2} len={w - 0.4} />
+      <Skirting x={-w / 2 + 0.2} z={0} len={d - 0.4} alongX={false} />
+      <Skirting x={w / 2 - 0.2} z={0} len={d - 0.4} alongX={false} />
       {/* bedroom partition (right side) with a door gap */}
       <Partition x={1.5} z={-2.4} w={7.2} />
       <Partition x={4.45} z={2.6} w={3.1} />
@@ -239,6 +376,22 @@ export function ApartmentInterior({ plot }: { plot: Plot }) {
         <circleGeometry args={[1.5, 20]} />
         <meshStandardMaterial color="#a83a32" roughness={1} />
       </mesh>
+      {/* reading corner: shelf, stool + mug, plant, art, fan */}
+      <Bookshelf x={1.2} z={-d / 2 + 0.65} />
+      <group position={[-1.2, 0, 2.2]}>
+        <mesh position={[0, 0.23, 0]} castShadow>
+          <cylinderGeometry args={[0.3, 0.34, 0.46, 12]} />
+          <meshStandardMaterial color="#7a4a28" roughness={0.85} />
+        </mesh>
+        <mesh position={[0.08, 0.55, 0]}>
+          <cylinderGeometry args={[0.07, 0.06, 0.12, 10]} />
+          <meshStandardMaterial color="#eceae6" roughness={0.5} />
+        </mesh>
+      </group>
+      <Plant x={5.0} z={4.5} />
+      <ArtFrame x={-3.5} y={1.9} z={-d / 2 + 0.36} c1="#e8d5a8" c2="#a83a32" />
+      <ArtFrame x={4.3} y={1.9} z={-d / 2 + 0.36} c1="#274b73" c2="#d9a62e" />
+      <CeilingFan x={0} z={0.5} />
       {/* kitchen corner */}
       <Counter x={-w / 2 + 1.6} z={-d / 2 + 1.1} w={3.2} color="#6f6a60" />
       {[-0.8, 0, 0.8].map((dx, i) => (

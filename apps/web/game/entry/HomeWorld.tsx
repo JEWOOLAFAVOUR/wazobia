@@ -7,8 +7,11 @@ import { wallBoxes } from "@/game/world/yaba/derive";
 import { ApartmentInterior, interiorColliders, interiorSpots, localBoxToWorld } from "@/game/world/yaba/interiors";
 import { PlotShell } from "@/game/world/yaba/Hood";
 import { homeOccluders } from "@/game/world/yaba/occluders";
-import { HOME_PLOT, HOME_SPAWN } from "@/game/navigation/locations";
+import { makeTileMaps } from "@/game/world/yaba/floorTexture";
+import { HOME_BOUNDS, HOME_EXIT, HOME_PLOT, HOME_SPAWN, hasCrossedHomeExit } from "@/game/navigation/locations";
 import EntryPlayer, { type EntryPos } from "@/game/player/EntryPlayer";
+import { findReachableTarget, type StepTarget } from "@/game/player/stepping";
+import HomeResident from "@/game/entry/HomeResident";
 import EntryCamera from "@/game/camera/EntryCamera";
 import type { Avatar } from "@/game/character/wardrobe";
 import type { Box } from "@/lib/collision";
@@ -22,15 +25,31 @@ export default function HomeWorld({
   onToast,
   refreshStatus,
   spawn = HOME_SPAWN,
+  onExit,
 }: {
   avatar: Avatar;
   onToast: (msg: string | null) => void;
   refreshStatus: () => void;
   spawn?: EntryPos;
+  /** Step outside through the front door — back to the Yaba street. */
+  onExit?: () => void;
 }) {
   const posRef = useRef<EntryPos>({ ...spawn });
   const [near, setNear] = useState<Spot | null>(null);
+  const [marker, setMarker] = useState<StepTarget | null>(null);
+  const moveTargetRef = useRef<StepTarget | null>(null);
+  const markerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const occluders = useMemo(() => homeOccluders(), []);
+  const floorMaps = useMemo(() => (typeof document === "undefined" ? null : makeTileMaps()), []);
+  const onExitRef = useRef(onExit);
+  useEffect(() => {
+    onExitRef.current = onExit;
+  }, [onExit]);
+  useEffect(() => {
+    return () => {
+      if (markerTimer.current) clearTimeout(markerTimer.current);
+    };
+  }, []);
 
   const { colliders, spots } = useMemo(() => {
     const colliders: Box[] = wallBoxes(APT).map((b) => ({ x: b.x, z: b.z, hx: b.hx, hz: b.hz }));
@@ -39,9 +58,32 @@ export default function HomeWorld({
       const c = localBoxToWorld(APT, b);
       colliders.push(c);
     }
+    // Front-door gap stays physically open — crossing it exits (see checkNear).
     const spots: Spot[] = interiorSpots("apartment").map((s) => ({ ...s, id: `home-${s.id}` }));
+    spots.push({
+      id: "home-spot-door",
+      title: "Front door",
+      detail: "Step outside to Yaba.",
+      x: HOME_EXIT.x,
+      z: HOME_EXIT.z - 1.6,
+      radius: 2.2,
+    });
     return { colliders, spots };
   }, []);
+
+  const goToFloor = (x: number, z: number) => {
+    // Tapping yourself does nothing — no toast, no target.
+    if (Math.hypot(x - posRef.current.x, z - posRef.current.z) < 0.4) return;
+    const dest = findReachableTarget(posRef.current, { x, z }, colliders, HOME_BOUNDS);
+    if (!dest) {
+      onToast("Can't get there — something is in the way.");
+      return;
+    }
+    moveTargetRef.current = dest;
+    setMarker(dest);
+    if (markerTimer.current) clearTimeout(markerTimer.current);
+    markerTimer.current = setTimeout(() => setMarker(null), 2200);
+  };
 
   const nearRef = useRef<Spot | null>(null);
   useEffect(() => {
@@ -49,6 +91,11 @@ export default function HomeWorld({
   }, [near]);
 
   const checkNear = (x: number, z: number) => {
+    // Walked out through the actual doorway → step outside to the street.
+    if (hasCrossedHomeExit(x, z)) {
+      onExitRef.current?.();
+      return;
+    }
     let best: Spot | null = null;
     let bd = Infinity;
     for (const s of spots) {
@@ -83,6 +130,10 @@ export default function HomeWorld({
   const interact = () => {
     const n = nearRef.current;
     if (!n) return;
+    if (n.id === "home-spot-door") {
+      onExitRef.current?.();
+      return;
+    }
     if (n.id === "home-spot-kitchen") {
       eat();
       return;
@@ -112,8 +163,31 @@ export default function HomeWorld({
           <meshStandardMaterial color="#a9c08a" roughness={1} />
         </mesh>
         <Suspense fallback={null}>
-          <PlotShell plot={APT} ghost={false} />
-          <ApartmentInterior plot={APT} />
+          <PlotShell plot={APT} ghost={false} roof={false} />
+          {/* open door leaf on its hinge — the gap is the physical exit */}
+          <group position={[APT.x - 1.05, 0, APT.z + APT.d / 2]} rotation={[0, -0.85, 0]}>
+            <mesh position={[0.5, 1.3, 0]}>
+              <boxGeometry args={[1.0, 2.6, 0.1]} />
+              <meshStandardMaterial color="#6b4a2f" roughness={0.85} />
+            </mesh>
+            <mesh position={[0.85, 1.3, 0.08]}>
+              <sphereGeometry args={[0.06, 10, 10]} />
+              <meshStandardMaterial color="#d9a62e" roughness={0.4} metalness={0.6} />
+            </mesh>
+          </group>
+          {/* stoop slab in the doorway */}
+          <mesh position={[APT.x, 0.05, APT.z + APT.d / 2 + 0.4]} receiveShadow>
+            <boxGeometry args={[2.6, 0.1, 1.6]} />
+            <meshStandardMaterial color="#8a8478" roughness={1} />
+          </mesh>
+          <ApartmentInterior plot={APT} floorMap={floorMaps?.map} floorRoughness={floorMaps?.roughnessMap} onFloorClick={goToFloor} />
+          {marker && (
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[marker.x, 0.09, marker.z]}>
+              <ringGeometry args={[0.24, 0.34, 24]} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.75} side={2} />
+            </mesh>
+          )}
+          <HomeResident colliders={colliders} />
           <EntryPlayer
             key={`${spawn.x}:${spawn.z}`}
             avatar={avatar}
@@ -122,9 +196,11 @@ export default function HomeWorld({
             colliders={colliders}
             onMove={checkNear}
             onInteractKey={interact}
+            moveTargetRef={moveTargetRef}
+            onTargetDone={() => setMarker(null)}
           />
         </Suspense>
-        <EntryCamera posRef={posRef} occluders={occluders} />
+        <EntryCamera posRef={posRef} occluders={occluders} maxPitch={1.4} initialDist={9} initialPitch={0.6} />
       </Canvas>
       {near && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-24 bg-white/95 rounded-full px-4 py-2 text-xs text-slate-700 shadow">

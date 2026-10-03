@@ -58,6 +58,9 @@ export function interiorColliders(p: { w: number; d: number; interior: "restaura
     { x: 3.9, z: -3.4, hx: 1.0, hz: 1.5 },
     { x: 5.3, z: -3.4, hx: 0.45, hz: 1.1 },
     { x: -4.55, z: -4.55, hx: 1.6, hz: 0.4 },
+    { x: 1.2, z: -5.0, hx: 1.3, hz: 0.45 },
+    { x: 5.0, z: 4.5, hx: 0.35, hz: 0.35 },
+    { x: -1.2, z: 2.2, hx: 0.3, hz: 0.3 },
   ];
 }
 

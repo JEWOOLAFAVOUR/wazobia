@@ -20,7 +20,8 @@ import { streetOccluders } from "@/game/world/yaba/occluders";
 import { HOME_SPAWN, LOCATIONS, navigateToLocation, type WorldLocation } from "@/game/navigation/locations";
 import EntryPlayer, { type EntryPos } from "@/game/player/EntryPlayer";
 import EntryCamera from "@/game/camera/EntryCamera";
-import { LagosMapBlocks, MapCamera, type MapFocus } from "@/game/entry/LagosMap";
+import { CITY_CENTER, LagosMapBlocks, MapCamera, type MapFocus } from "@/game/entry/LagosMap";
+import AmbientLife from "@/game/world/yaba/AmbientLife";
 import type { Interactable } from "@/game/world/YabaBlock";
 
 const FILTERS = ["● Serious go-slow", "📢 Billboards", "🏘 Neighbours", "🌊 Sea", "🏛 Gov"];
@@ -85,7 +86,7 @@ function World() {
   const [homeSpawn, setHomeSpawn] = useState<EntryPos>({ ...HOME_SPAWN });
   const [showPlaces, setShowPlaces] = useState(false);
   const occluders = useMemo(() => streetOccluders(), []);
-  const mapFocus = useRef<MapFocus>({ x: 45, z: 24 });
+  const mapFocus = useRef<MapFocus>({ ...CITY_CENTER });
   const [near, setNear] = useState<Interactable | null>(null);
   const [insideId, setInsideId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -171,53 +172,81 @@ function World() {
   const mood = status == null ? "New here" : status.energy >= 60 ? "Fine" : status.energy >= 30 ? "Tired" : "Drained";
   const showStreet = tab === "live";
   const showMap = tab === "map";
-
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#6fb3d2] font-sans">
-      {showMap && (
-        <Canvas
-          dpr={[1, 1.5]}
-          camera={{ position: [465, 460, 444], fov: 32 }}
-          style={{ cursor: "grab", touchAction: "none" }}
-          onPointerMissed={() => {
-            document.body.style.cursor = "";
+      <Canvas
+        dpr={[1, 1.5]}
+        camera={{ position: [395, 390, 374], fov: 32, far: 4000 }}
+        frameloop={showMap ? "always" : "never"}
+        style={{
+          position: "absolute",
+          inset: 0,
+          cursor: "grab",
+          touchAction: "none",
+          visibility: showMap ? "visible" : "hidden",
+          pointerEvents: showMap ? "auto" : "none",
+        }}
+        onPointerMissed={() => {
+          document.body.style.cursor = "";
+        }}
+      >
+        <color attach="background" args={["#6fb3d2"]} />
+        <ambientLight intensity={0.9} />
+        <hemisphereLight args={["#e8f4ff", "#4a5a48", 0.6]} />
+        <directionalLight position={[24, 30, 12]} intensity={1.4} color="#fff2d9" />
+        <Suspense fallback={null}>
+          <LagosMapBlocks onPick={pickVenue} />
+          <AmbientLife player={streetPos} mapView />
+        </Suspense>
+        <MapCamera focusRef={mapFocus} />
+      </Canvas>
+      <Canvas
+        shadows
+        dpr={[1, 1.5]}
+        camera={{ position: [0, 8, 18], fov: 50 }}
+        frameloop={showStreet ? "always" : "never"}
+        style={{
+          position: "absolute",
+          inset: 0,
+          touchAction: "none",
+          visibility: showStreet ? "visible" : "hidden",
+          pointerEvents: showStreet ? "auto" : "none",
+        }}
+      >
+        <color attach="background" args={["#f0c795"]} />
+        <ambientLight intensity={0.55} />
+        <hemisphereLight args={["#ffe3b3", "#2a3327", 0.5]} />
+        <directionalLight position={[18, 26, 10]} intensity={1.9} color="#ffd9a0" castShadow shadow-mapSize={[1024, 1024]} />
+        <directionalLight position={[-14, 10, -12]} intensity={0.35} color="#9db8ff" />
+        <fog attach="fog" args={["#d8b98a", 55, 110]} />
+        <Suspense fallback={null}>
+          <YabaHood insideId={insideId} />
+          <VenueLabels />
+          <EntryPlayer
+            key={`${streetSpawn.x}:${streetSpawn.z}`}
+            avatar={avatar}
+            initial={streetSpawn}
+            posRef={streetPos}
+            colliders={HOOD.colliders}
+            onMove={checkNear}
+            onInteractKey={interact}
+          />
+          <AmbientLife player={streetPos} />
+        </Suspense>
+        <EntryCamera posRef={streetPos} occluders={occluders} />
+      </Canvas>
+      {tab === "home" && (
+        <HomeWorld
+          avatar={avatar}
+          onToast={say}
+          refreshStatus={bump}
+          spawn={homeSpawn}
+          onExit={() => {
+            const loc = navigateToLocation("apt-1");
+            if (loc) goToLocation(loc);
           }}
-        >
-          <color attach="background" args={["#6fb3d2"]} />
-          <ambientLight intensity={0.9} />
-          <hemisphereLight args={["#e8f4ff", "#4a5a48", 0.6]} />
-          <directionalLight position={[24, 30, 12]} intensity={1.4} color="#fff2d9" />
-          <Suspense fallback={null}>
-            <LagosMapBlocks onPick={pickVenue} />
-          </Suspense>
-          <MapCamera focusRef={mapFocus} />
-        </Canvas>
+        />
       )}
-      {showStreet && (
-        <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 8, 18], fov: 50 }}>
-          <color attach="background" args={["#f0c795"]} />
-          <ambientLight intensity={0.55} />
-          <hemisphereLight args={["#ffe3b3", "#2a3327", 0.5]} />
-          <directionalLight position={[18, 26, 10]} intensity={1.9} color="#ffd9a0" castShadow shadow-mapSize={[1024, 1024]} />
-          <directionalLight position={[-14, 10, -12]} intensity={0.35} color="#9db8ff" />
-          <fog attach="fog" args={["#d8b98a", 55, 110]} />
-          <Suspense fallback={null}>
-            <YabaHood insideId={insideId} />
-            <VenueLabels />
-            <EntryPlayer
-              key={`${streetSpawn.x}:${streetSpawn.z}`}
-              avatar={avatar}
-              initial={streetSpawn}
-              posRef={streetPos}
-              colliders={HOOD.colliders}
-              onMove={checkNear}
-              onInteractKey={interact}
-            />
-          </Suspense>
-          <EntryCamera posRef={streetPos} occluders={occluders} />
-        </Canvas>
-      )}
-      {tab === "home" && <HomeWorld avatar={avatar} onToast={say} refreshStatus={bump} spawn={homeSpawn} />}
 
       {!clean && (
         <>
@@ -278,7 +307,7 @@ function World() {
               </div>
             )}
             {tab === "home" && (
-              <div className="bg-white/90 rounded-full px-4 py-1.5 text-xs text-slate-600 shadow">Eat something — walk to the counter, tap E · 📍 Go somewhere to travel</div>
+              <div className="bg-white/90 rounded-full px-4 py-1.5 text-xs text-slate-600 shadow">Tap the floor to walk there · 📍 Go somewhere to travel</div>
             )}
           </div>
 

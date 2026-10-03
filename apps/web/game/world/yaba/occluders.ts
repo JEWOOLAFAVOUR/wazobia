@@ -33,7 +33,7 @@ function roofSlab(plotId: string, cx: number, cz: number, w: number, d: number, 
 const FURNITURE_H: Record<string, number[]> = {
   restaurant: [1.2, 0.8, 0.8],
   shop: [1.6, 1.6, 1.6, 1.2, 2.0],
-  apartment: [2.7, 2.7, 1.1, 1.4, 0.75, 2.0, 1.2],
+  apartment: [2.7, 2.7, 1.1, 1.4, 0.75, 2.0, 1.2, 1.8, 1.2, 0.5],
 };
 
 function furniture(plot: Plot, dims: { w: number; d: number; interior: "restaurant" | "shop" | "apartment" }): Occluder[] {
@@ -84,6 +84,16 @@ export function streetOccluders(): Occluder[] {
 export function homeOccluders(opts?: { roof?: boolean }): Occluder[] {
   const out: Occluder[] = [];
   for (const b of wallBoxes(HOME_PLOT)) out.push(flat(b, 0, ENTERABLE_WALL_H));
+  // Closed front door leaf — matches the visual panel + movement blocker so
+  // neither the player nor an eye-level camera can slip through the gap.
+  out.push({
+    minX: HOME_PLOT.x - 1.3,
+    minY: 0,
+    minZ: HOME_PLOT.z + HOME_PLOT.d / 2 - 0.25,
+    maxX: HOME_PLOT.x + 1.3,
+    maxY: 2.7,
+    maxZ: HOME_PLOT.z + HOME_PLOT.d / 2 + 0.25,
+  });
   if (opts?.roof ?? false) {
     out.push(roofSlab(HOME_PLOT.id, HOME_PLOT.x, HOME_PLOT.z, HOME_PLOT.w, HOME_PLOT.d, ENTERABLE_WALL_H));
   }

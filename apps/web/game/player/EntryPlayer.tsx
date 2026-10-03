@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { resolveCollision, type Box } from "@/lib/collision";
@@ -35,6 +35,8 @@ export default function EntryPlayer({ avatar, initial, posRef, colliders, onMove
   const group = useRef<THREE.Group>(null);
   const keys = useRef<Record<string, boolean>>({});
   const heading = useRef(initial.heading);
+  const [walking, setWalking] = useState(false);
+  const walkingRef = useRef(false);
   const onMoveRef = useRef(onMove);
   const onInteractRef = useRef(onInteractKey);
   const onTargetDoneRef = useRef(onTargetDone);
@@ -122,12 +124,16 @@ export default function EntryPlayer({ avatar, initial, posRef, colliders, onMove
       group.current.position.set(posRef.current.x, 0, posRef.current.z);
       group.current.rotation.y = heading.current;
     }
+    if (moving !== walkingRef.current) {
+      walkingRef.current = moving;
+      setWalking(moving);
+    }
     onMoveRef.current?.(posRef.current.x, posRef.current.z, moving);
   });
 
   return (
     <group ref={group} position={[initial.x, 0, initial.z]} rotation={[0, initial.heading, 0]}>
-      <SimpleAvatar avatar={avatar} />
+      <SimpleAvatar avatar={avatar} moving={walking} />
       {/* soft contact disc */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <circleGeometry args={[0.55, 20]} />
