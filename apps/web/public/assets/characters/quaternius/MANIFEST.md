@@ -58,3 +58,19 @@ convert albedo to JPEG/WebP, consider `.glb` packing (ui-guide §28).
   files not vendored here. Hair albedo is mid-gray (meant to be tinted), so hair
   COLOR is also a tint multiplier — 3 shades implemented, dark default doubles
   as a fix for the ashy untinted look.
+
+## Procedural wardrobe (Phase 2B — no downloads, authored in code)
+
+All items below are generated at runtime in `game/character/` — no external
+source, no license risk (project code). They follow the Quaternius skeleton
+exactly (shells share its skin weights; props pin to its bones):
+
+| Item | Method | File |
+| ---- | ------ | ---- |
+| Tee / Polo / Button-up / Long-sleeve / Native top | Body-shell cut + collar ring + button spheres | `garments.ts`, `attachments.ts`, `AvatarModel.tsx` |
+| Trousers / Jeans / Shorts | Body-shell cut (shorts = knee trim) | `garments.ts` |
+| Skirt (female) | Skinned flare cone, pelvis/thigh weights | `garments.ts` `buildSkirt` |
+| Sneakers / Leather shoes | Foot shell | `garments.ts` |
+| Sandals / Slides | Procedural sole + straps, sized from foot geometry | `AvatarModel.tsx` |
+| Cap / Head wrap | Procedural dome+brim / band+crown, fitted to measured head | `attachments.ts` |
+| Glasses / Watch / Backpack / Handbag | Procedural, placed from measured eye/wrist/torso landmarks | `attachments.ts` |

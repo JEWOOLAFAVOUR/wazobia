@@ -34,8 +34,19 @@ export const HAIR_COLORS: HairColor[] = [
 
 const BASE_HAIR: [number, number, number] = [143, 144, 140];
 
+// Eye texture mixes sclera + iris, so eye options are direct multipliers
+// (safe on any content) rather than absolute tones.
+export type EyeColor = { id: string; label: string; swatch: string; mult: [number, number, number] };
+
+export const EYE_COLORS: EyeColor[] = [
+  { id: "espresso", label: "Dark brown", swatch: "#3a2417", mult: [1, 1, 1] },
+  { id: "black", label: "Black", swatch: "#14100c", mult: [0.35, 0.35, 0.38] },
+  { id: "amber", label: "Amber", swatch: "#8a5a28", mult: [1.25, 0.95, 0.6] },
+];
+
 const SKIN_MATERIALS = new Set(["MI_Superhero_Male", "MI_Superhero_Female"]);
 const HAIR_MATERIALS = new Set(["MI_Hair_1", "MI_Hair_2"]);
+const EYE_MATERIALS = new Set(["MI_Eyes"]);
 
 function multiplier(target: [number, number, number], base: [number, number, number]): THREE.Color {
   return new THREE.Color(target[0] / base[0], target[1] / base[1], target[2] / base[2]);
@@ -46,11 +57,14 @@ export function applyAppearance(
   body: CharacterId,
   skinId: string,
   hairId: string,
+  eyesId: string,
 ): void {
   const skin = SKIN_TONES.find((t) => t.id === skinId) ?? SKIN_TONES[2];
   const hair = HAIR_COLORS.find((h) => h.id === hairId) ?? HAIR_COLORS[0];
+  const eyes = EYE_COLORS.find((e) => e.id === eyesId) ?? EYE_COLORS[0];
   const skinTint = multiplier(skin.target, BASE_SKIN[body]);
   const hairTint = multiplier(hair.target, BASE_HAIR);
+  const eyeTint = new THREE.Color(...eyes.mult);
   scene.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -60,6 +74,7 @@ export function applyAppearance(
       if (!std || typeof std.name !== "string" || !("color" in std)) continue;
       if (SKIN_MATERIALS.has(std.name)) std.color.copy(skinTint);
       else if (HAIR_MATERIALS.has(std.name)) std.color.copy(hairTint);
+      else if (EYE_MATERIALS.has(std.name)) std.color.copy(eyeTint);
     }
   });
 }

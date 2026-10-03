@@ -1,54 +1,16 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Suspense } from "react";
+import { Canvas } from "@react-three/fiber";
 import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
-import * as THREE from "three";
-import { CHARACTERS, IDLE_CLIP_NAME, IDLE_LIBRARY_URL, type CharacterId } from "./characters";
-import { applyAppearance } from "./appearance";
-import { remapIdleClip } from "./remap";
+import { CHARACTERS, IDLE_LIBRARY_URL } from "./characters";
+import { AvatarModel } from "./AvatarModel";
+import type { Avatar } from "./wardrobe";
 
 for (const c of CHARACTERS) useGLTF.preload(c.modelUrl);
 useGLTF.preload(IDLE_LIBRARY_URL);
 
-function CharacterModel({ id, skin, hair }: { id: CharacterId; skin: string; hair: string }) {
-  const entry = CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
-  const { scene } = useGLTF(entry.modelUrl);
-  const { animations } = useGLTF(IDLE_LIBRARY_URL);
-  const mixer = useRef<THREE.AnimationMixer | null>(null);
-
-  const idle = useMemo(() => {
-    const clip = animations.find((a) => a.name === IDLE_CLIP_NAME);
-    if (!clip) return null;
-    return remapIdleClip(clip);
-  }, [animations]);
-
-  useEffect(() => {
-    if (!idle) return;
-    const m = new THREE.AnimationMixer(scene);
-    const action = m.clipAction(idle);
-    action.play();
-    mixer.current = m;
-    return () => {
-      action.stop();
-      m.uncacheClip(idle);
-      mixer.current = null;
-    };
-  }, [scene, idle]);
-
-  useFrame((_, rawDt) => {
-    mixer.current?.update(Math.min(rawDt, 0.05));
-  });
-
-  // Appearance touches materials only — the idle mixer keeps running.
-  useEffect(() => {
-    applyAppearance(scene, id, skin, hair);
-  }, [scene, id, skin, hair]);
-
-  return <primitive object={scene} />;
-}
-
-export default function CharacterViewer({ id, skin, hair }: { id: CharacterId; skin: string; hair: string }) {
+export default function CharacterViewer({ avatar }: { avatar: Avatar }) {
   return (
     <Canvas
       camera={{ position: [0, 1.45, 3.4], fov: 34 }}
@@ -60,7 +22,7 @@ export default function CharacterViewer({ id, skin, hair }: { id: CharacterId; s
       <directionalLight position={[2.5, 4, 3]} intensity={1.6} castShadow />
       <directionalLight position={[-3, 2, -2]} intensity={0.45} />
       <Suspense fallback={null}>
-        <CharacterModel key={id} id={id} skin={skin} hair={hair} />
+        <AvatarModel key={avatar.body} avatar={avatar} />
       </Suspense>
       <ContactShadows position={[0, 0.001, 0]} scale={6} blur={2.6} opacity={0.55} far={2.5} />
       <OrbitControls
