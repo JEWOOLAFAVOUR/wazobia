@@ -7,14 +7,19 @@ import type { Proximity } from "@/game/world/YabaScene";
 import { useSocket } from "@/game/networking/useSocket";
 import ChatPanel from "@/components/ChatPanel";
 import PresenceList from "@/components/PresenceList";
+import AuthBox from "@/components/AuthBox";
+import ShopPanel from "@/components/ShopPanel";
 
 const YabaScene = dynamic(() => import("@/game/world/YabaScene"), { ssr: false });
+
+const SHOP_KINDS = new Set(["restaurant", "shop"]);
 
 export default function Home() {
   const [buildings, setBuildings] = useState<Building[]>(fallbackBuildings);
   const [health, setHealth] = useState<string>("checking…");
   const [near, setNear] = useState<Proximity>(null);
   const [count, setCount] = useState(1);
+  const [walletKey, setWalletKey] = useState(0);
   const userId = useMemo(() => `web-${Math.floor(Math.random() * 100000)}`, []);
   const posRef = useRef({ x: 0, z: 12 });
   const socket = useSocket(userId, "zone-b", posRef);
@@ -27,6 +32,8 @@ export default function Home() {
       .then(setBuildings)
       .catch(() => {});
   }, []);
+
+  const shopId = near && SHOP_KINDS.has(near.kind) ? near.id : null;
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-950 text-zinc-50 font-sans">
@@ -41,22 +48,28 @@ export default function Home() {
             {n.kind === "join" ? "→" : "←"} {n.userId} {n.kind === "join" ? "entered" : "left"} zone-b
           </div>
         ))}
-        {near ? (
-          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            Near <b>{near.name}</b> <span className="text-zinc-400">({near.kind}, {near.d.toFixed(1)}m)</span> — entering interiors lands in Phase 4 (economy). Chat below is live now.
-          </div>
-        ) : (
-          <div className="rounded-xl border border-zinc-800 p-3 text-sm text-zinc-400">
-            Walk with <b className="text-zinc-200">WASD / arrows</b>, hold <b className="text-zinc-200">Shift</b> to run. Server clamps speed + bounds; no per-frame Postgres writes.
-          </div>
+        <ShopPanel shopId={shopId} walletKey={walletKey} onPurchased={() => setWalletKey((k) => k + 1)} />
+        {!shopId && (
+          near ? (
+            <div className="rounded-xl border border-zinc-800 p-3 text-sm text-zinc-400">
+              Near <b className="text-zinc-200">{near.name}</b> ({near.kind}) — shops open a buy menu; other buildings land in later phases.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-zinc-800 p-3 text-sm text-zinc-400">
+              Walk with <b className="text-zinc-200">WASD / arrows</b>, hold <b className="text-zinc-200">Shift</b> to run. Walk to <b className="text-zinc-200">Mama Put Spot</b> or <b className="text-zinc-200">Corner Shop</b> to buy — money moves via atomic ledger.
+            </div>
+          )
         )}
         <div className="grid sm:grid-cols-2 gap-3">
           <ChatPanel chats={socket.chats} onSend={socket.sendChat} />
-          <PresenceList zone="zone-b" />
+          <div className="flex flex-col gap-3">
+            <AuthBox onAuth={() => setWalletKey((k) => k + 1)} />
+            <PresenceList zone="zone-b" />
+          </div>
         </div>
         <div className="rounded-xl border border-zinc-800 p-4 text-sm">
-          <div className="font-semibold mb-1">Phase 3 — multiplayer</div>
-          <p className="text-zinc-400">WS: move (10Hz, validated) + chat (zone/global, 280 chars, 500ms limit) + join/leave. Interest: zone-only for moves; global reaches all zones. Presence: Redis TTL, <code>/api/presence?zone=zone-b</code> polls every 5s.</p>
+          <div className="font-semibold mb-1">Phase 4 — economy</div>
+          <p className="text-zinc-400">Register → ₦50,000 starter → walk to a shop → Buy. Server runs one Postgres TX per purchase (lock player + stock, ledger debit/credit, idempotency key). <code>POST /api/purchases</code> · <code>GET /api/wallet</code> · <code>GET /api/shops</code>.</p>
         </div>
       </main>
     </div>

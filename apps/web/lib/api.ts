@@ -28,3 +28,14 @@ export const fallbackBuildings: Building[] = [
   { id: "shop-1", zone: "zone-b", kind: "shop", name: "Corner Shop", x: 18, z: 8, open: true },
   { id: "bank-1", zone: "zone-b", kind: "bank", name: "Wazobia Bank", x: -8, z: -18, open: true },
 ];
+
+export type MenuItem = { itemId: string; name: string; priceKobo: number; qty: number };
+export type Shop = { id: string; name: string; zone: string; kind: string; open: boolean; menu?: MenuItem[] };
+export type WalletItem = { itemId: string; qty: number; name: string; priceKobo: number };
+export type Wallet = { balanceKobo: number; home: string; displayName: string; inventory: WalletItem[]; recent: unknown[] };
+export type Receipt = { transactionId: string; shopId: string; itemId: string; priceKobo: number; newBalanceKobo: number; newQty: number; idempotentReplay?: boolean };
+
+export function formatNaira(kobo: number): string {
+  const naira = kobo / 100;
+  return "₦" + naira.toLocaleString("en-NG");
+}
