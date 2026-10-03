@@ -16,10 +16,12 @@ import PhoneSheet from "@/game/entry/PhoneSheet";
 import HomeWorld from "@/game/entry/HomeWorld";
 import YabaHood, { HOOD, plotAtPoint } from "@/game/world/yaba/Hood";
 import { PLOTS, SPAWN } from "@/game/world/yaba/layout";
+import { streetOccluders } from "@/game/world/yaba/occluders";
+import { HOME_SPAWN, LOCATIONS, navigateToLocation, type WorldLocation } from "@/game/navigation/locations";
 import EntryPlayer, { type EntryPos } from "@/game/player/EntryPlayer";
 import EntryCamera from "@/game/camera/EntryCamera";
 import EntryTransition from "@/game/ui/EntryTransition";
-import { LagosMapBlocks, MapCamera, streetDoor, type MapFocus } from "@/game/entry/LagosMap";
+import { LagosMapBlocks, MapCamera, type MapFocus } from "@/game/entry/LagosMap";
 import type { Interactable } from "@/game/world/YabaBlock";
 
 type Phase = "fade" | "title" | "world";
@@ -83,6 +85,9 @@ function World() {
 
   const streetPos = useRef<EntryPos>({ x: SPAWN.x, z: SPAWN.z, heading: SPAWN.facing });
   const [streetSpawn, setStreetSpawn] = useState<EntryPos>({ x: SPAWN.x, z: SPAWN.z, heading: SPAWN.facing });
+  const [homeSpawn, setHomeSpawn] = useState<EntryPos>({ ...HOME_SPAWN });
+  const [showPlaces, setShowPlaces] = useState(false);
+  const occluders = useMemo(() => streetOccluders(), []);
   const mapFocus = useRef<MapFocus>({ x: 0, z: 0 });
   const [phase, setPhase] = useState<Phase>("fade");
   const [near, setNear] = useState<Interactable | null>(null);
@@ -152,12 +157,27 @@ function World() {
     say(`${p?.name ?? plotId} — tap Walk street to go there.`);
   };
 
-  const walkTo = (plotId: string) => {
-    const door = streetDoor(plotId);
-    if (door) {
-      const next = { x: door.x, z: door.z, heading: streetPos.current.heading };
+  /** Single teleport path: every Home/map button funnels through here. */
+  const goToLocation = (loc: WorldLocation) => {
+    if (loc.areaId === "home-interior") {
+      setHomeSpawn({ x: loc.x, z: loc.z, heading: loc.heading });
+      setTab("home");
+    } else {
+      const next = { x: loc.x, z: loc.z, heading: loc.heading };
       streetPos.current = next;
       setStreetSpawn(next);
+      setTab("live");
+    }
+    setShowPlaces(false);
+    say(`Arrived at ${loc.label} — walk normally.`);
+  };
+
+  const walkTo = (plotId: string) => {
+    const loc = navigateToLocation(plotId);
+    if (loc) {
+      if (loc.areaId === "yaba-street") mapFocus.current = { x: loc.x, z: loc.z };
+      goToLocation(loc);
+      return;
     }
     setTab("live");
   };
@@ -208,10 +228,10 @@ function World() {
               onInteractKey={interact}
             />
           </Suspense>
-          <EntryCamera posRef={streetPos} />
+          <EntryCamera posRef={streetPos} occluders={occluders} />
         </Canvas>
       )}
-      {tab === "home" && <HomeWorld avatar={avatar} onToast={say} refreshStatus={bump} />}
+      {tab === "home" && <HomeWorld avatar={avatar} onToast={say} refreshStatus={bump} spawn={homeSpawn} />}
 
       {!clean && (
         <>
@@ -272,9 +292,35 @@ function World() {
               </div>
             )}
             {tab === "home" && (
-              <div className="bg-white/90 rounded-full px-4 py-1.5 text-xs text-slate-600 shadow">Eat something — walk to the counter, tap E</div>
+              <div className="bg-white/90 rounded-full px-4 py-1.5 text-xs text-slate-600 shadow">Eat something — walk to the counter, tap E · 📍 Go somewhere to travel</div>
             )}
           </div>
+
+          {/* Home places menu — every destination resolves via navigateToLocation */}
+          {tab === "home" && (
+            <div className="absolute right-3 top-24 w-[min(70vw,260px)] flex flex-col items-end gap-2">
+              <button
+                onClick={() => setShowPlaces((v) => !v)}
+                className="pointer-events-auto rounded-full bg-slate-900 text-white text-xs font-bold px-4 py-2.5 shadow"
+              >
+                {showPlaces ? "✕ Close places" : "📍 Go somewhere"}
+              </button>
+              {showPlaces && (
+                <div className="pointer-events-auto w-full rounded-3xl bg-white/95 shadow-xl p-2 max-h-[52vh] overflow-y-auto">
+                  {LOCATIONS.map((l) => (
+                    <button
+                      key={l.id}
+                      onClick={() => goToLocation(l)}
+                      className="w-full text-left rounded-2xl px-4 py-2.5 hover:bg-slate-100"
+                    >
+                      <div className="text-sm font-bold text-slate-800">{l.label}</div>
+                      <div className="text-[11px] text-slate-500">{l.detail}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* needs */}
           <div className="absolute left-3 bottom-24 pointer-events-none">

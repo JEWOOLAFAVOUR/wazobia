@@ -362,18 +362,34 @@ function CompoundWalls({ plot }: { plot: Plot }) {
         <boxGeometry args={[hw * 2, h, t]} />
         <meshStandardMaterial color="#c9bfa8" roughness={1} />
       </mesh>
+      <mesh position={[0, h + 0.06, -hd]}>
+        <boxGeometry args={[hw * 2 + 0.12, 0.12, t + 0.12]} />
+        <meshStandardMaterial color="#f2ece0" roughness={1} />
+      </mesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * hw, h / 2, 0]}>
-          <boxGeometry args={[t, h, hd * 2]} />
-          <meshStandardMaterial color="#c9bfa8" roughness={1} />
-        </mesh>
+        <group key={s}>
+          <mesh position={[s * hw, h / 2, 0]}>
+            <boxGeometry args={[t, h, hd * 2]} />
+            <meshStandardMaterial color="#c9bfa8" roughness={1} />
+          </mesh>
+          <mesh position={[s * hw, h + 0.06, 0]}>
+            <boxGeometry args={[t + 0.12, 0.12, hd * 2]} />
+            <meshStandardMaterial color="#f2ece0" roughness={1} />
+          </mesh>
+        </group>
       ))}
       {/* front split around a 3m gate */}
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * (1.5 + (hw - 1.5) / 2), h / 2, hd]}>
-          <boxGeometry args={[hw - 1.5, h, t]} />
-          <meshStandardMaterial color="#c9bfa8" roughness={1} />
-        </mesh>
+        <group key={s}>
+          <mesh position={[s * (1.5 + (hw - 1.5) / 2), h / 2, hd]}>
+            <boxGeometry args={[hw - 1.5, h, t]} />
+            <meshStandardMaterial color="#c9bfa8" roughness={1} />
+          </mesh>
+          <mesh position={[s * (1.5 + (hw - 1.5) / 2), h + 0.06, hd]}>
+            <boxGeometry args={[hw - 1.5, 0.12, t + 0.12]} />
+            <meshStandardMaterial color="#f2ece0" roughness={1} />
+          </mesh>
+        </group>
       ))}
       {[-1.7, 1.7].map((dx, i) => (
         <mesh key={i} position={[dx, 1.4, hd]} castShadow>

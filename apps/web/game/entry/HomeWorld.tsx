@@ -3,19 +3,17 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { api } from "@/lib/api";
-import { PLOTS } from "@/game/world/yaba/layout";
 import { wallBoxes } from "@/game/world/yaba/derive";
 import { ApartmentInterior, interiorColliders, interiorSpots, localBoxToWorld } from "@/game/world/yaba/interiors";
 import { PlotShell } from "@/game/world/yaba/Hood";
+import { homeOccluders } from "@/game/world/yaba/occluders";
+import { HOME_PLOT, HOME_SPAWN } from "@/game/navigation/locations";
 import EntryPlayer, { type EntryPos } from "@/game/player/EntryPlayer";
 import EntryCamera from "@/game/camera/EntryCamera";
 import type { Avatar } from "@/game/character/wardrobe";
 import type { Box } from "@/lib/collision";
 
-const APT = (() => {
-  const p = PLOTS.find((x) => x.id === "apt-1") ?? PLOTS[0];
-  return { ...p, x: 0, z: 0, facing: "+z" as const };
-})();
+const APT = HOME_PLOT;
 
 type Spot = { id: string; title: string; detail: string; x: number; z: number; radius: number };
 
@@ -23,13 +21,16 @@ export default function HomeWorld({
   avatar,
   onToast,
   refreshStatus,
+  spawn = HOME_SPAWN,
 }: {
   avatar: Avatar;
   onToast: (msg: string | null) => void;
   refreshStatus: () => void;
+  spawn?: EntryPos;
 }) {
-  const posRef = useRef<EntryPos>({ x: -3.2, z: 3.4, heading: Math.PI });
+  const posRef = useRef<EntryPos>({ ...spawn });
   const [near, setNear] = useState<Spot | null>(null);
+  const occluders = useMemo(() => homeOccluders(), []);
 
   const { colliders, spots } = useMemo(() => {
     const colliders: Box[] = wallBoxes(APT).map((b) => ({ x: b.x, z: b.z, hx: b.hx, hz: b.hz }));
@@ -101,11 +102,11 @@ export default function HomeWorld({
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 9, 13], fov: 50 }}>
+      <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 9, 13], fov: 50 }}>
         <color attach="background" args={["#c9a6b8"]} />
         <ambientLight intensity={0.7} />
         <hemisphereLight args={["#ffe3d3", "#5a6b57", 0.55]} />
-        <directionalLight position={[14, 22, 10]} intensity={1.7} color="#ffd9a0" castShadow shadow-mapSize={[2048, 2048]} />
+        <directionalLight position={[14, 22, 10]} intensity={1.7} color="#ffd9a0" castShadow shadow-mapSize={[1024, 1024]} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>
           <circleGeometry args={[26, 40]} />
           <meshStandardMaterial color="#a9c08a" roughness={1} />
@@ -114,15 +115,16 @@ export default function HomeWorld({
           <PlotShell plot={APT} ghost={false} />
           <ApartmentInterior plot={APT} />
           <EntryPlayer
+            key={`${spawn.x}:${spawn.z}`}
             avatar={avatar}
-            initial={{ x: -3.2, z: 3.4, heading: Math.PI }}
+            initial={spawn}
             posRef={posRef}
             colliders={colliders}
             onMove={checkNear}
             onInteractKey={interact}
           />
         </Suspense>
-        <EntryCamera posRef={posRef} />
+        <EntryCamera posRef={posRef} occluders={occluders} />
       </Canvas>
       {near && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-24 bg-white/95 rounded-full px-4 py-2 text-xs text-slate-700 shadow">
