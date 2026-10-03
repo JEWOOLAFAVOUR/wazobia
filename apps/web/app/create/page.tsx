@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveAvatar } from "@/game/entry/avatarStore";
 import { SKIN_TONES } from "@/game/character/appearance";
@@ -71,6 +72,7 @@ export default function CreateCharacter() {
   const [step, setStep] = useState<"account" | "avatar">("account");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const router = useRouter();
 
@@ -185,15 +187,36 @@ export default function CreateCharacter() {
 
               <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
                 Password
-                <input
-                  name="password"
-                  type="password"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                  placeholder="At least 8 characters"
-                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3.5 font-normal outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
+                <span className="relative">
+                  <input
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    placeholder="At least 6 characters"
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 pr-12 font-normal outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-emerald-600"
+                  >
+                    {showPassword ? (
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.9 5.2A10.8 10.8 0 0112 5c5.2 0 8.7 4.5 9.5 6-.3.6-1.3 2-2.8 3.4M6.2 6.2C4.2 7.5 3 9.5 2.5 11c.8 1.5 4.3 6 9.5 6 1 0 2-.2 2.9-.5" />
+                      </svg>
+                    ) : (
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />
+                        <circle cx="12" cy="12" r="2.5" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
               </label>
 
               <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
@@ -218,7 +241,17 @@ export default function CreateCharacter() {
                 required
                 className="mt-0.5 h-4 w-4 accent-emerald-600"
               />
-              <span>I agree to Wazobia&apos;s Terms of Service and Privacy Policy.</span>
+              <span>
+                I agree to Wazobia&apos;s{" "}
+                <Link href="/terms" className="font-medium text-emerald-700 underline underline-offset-2">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" className="font-medium text-emerald-700 underline underline-offset-2">
+                  Privacy Policy
+                </Link>
+                .
+              </span>
             </label>
 
             <button
@@ -230,18 +263,18 @@ export default function CreateCharacter() {
           </form>
         </main>
       ) : (
-        <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-stretch gap-3 px-4 sm:px-6 pb-3 pt-1 max-w-[1500px] w-full mx-auto">
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row items-stretch gap-3 px-4 sm:px-6 pb-3 pt-1 max-w-[1500px] w-full mx-auto">
           {/* stage */}
-          <div className="flex-1 flex flex-col items-center justify-start min-h-0 pt-4 lg:pt-8">
-            <div className="w-full max-w-[34rem] h-[42vh] lg:h-[68vh] max-h-[68vh] [&>div]:h-full">
+          <div className="flex-none lg:flex-1 flex flex-col items-center justify-start min-h-0 pt-2 lg:pt-8">
+            <div className="w-full max-w-[34rem] h-[24vh] min-h-[170px] max-h-[220px] lg:h-[68vh] lg:min-h-0 lg:max-h-[68vh] [&>div]:h-full">
               <CharacterViewer avatar={avatar} />
             </div>
             <span className="text-[11px] text-slate-400 -mt-1">drag to spin</span>
           </div>
 
           {/* panel */}
-          <aside className="w-full lg:w-[560px] shrink-0 bg-white rounded-[28px] shadow-[0_8px_30px_rgba(15,23,42,0.08)] p-4 flex flex-col max-h-[calc(100vh-104px)] overflow-hidden">
-            <div className="flex-1 overflow-hidden">
+          <aside className="w-full lg:w-[560px] min-h-0 flex-1 lg:flex-none shrink-0 bg-white rounded-[28px] shadow-[0_8px_30px_rgba(15,23,42,0.08)] p-4 flex flex-col lg:max-h-[calc(100vh-104px)] overflow-y-auto lg:overflow-hidden">
+            <div className="flex-none lg:flex-1 lg:overflow-hidden">
             <div className="flex items-center gap-2 bg-slate-100 rounded-full pl-4 pr-2 py-2">
               <span className="font-bold text-slate-800 text-sm">@{avatar.name.trim() ? avatar.name.trim().toLowerCase().replace(/\s+/g, "_") : "you"}</span>
               <input
@@ -306,11 +339,11 @@ export default function CreateCharacter() {
                   title={f.label}
                   aria-label={f.label}
                   onClick={() => pickFabric(f.id)}
-                  className={`h-8 px-3 rounded-full text-sm flex items-center gap-2 ${
+                  className={`h-7 px-2.5 rounded-full text-xs flex items-center gap-1.5 ${
                     avatar.fabric === f.id ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
-                  <span className="w-4 h-4 rounded-full inline-block" style={{ backgroundColor: f.swatch }} />
+                  <span className="w-3.5 h-3.5 rounded-full inline-block" style={{ backgroundColor: f.swatch }} />
                   {f.label}
                 </button>
               ))}
