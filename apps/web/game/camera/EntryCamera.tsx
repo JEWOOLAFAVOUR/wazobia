@@ -26,6 +26,12 @@ export default function EntryCamera({ posRef }: { posRef: React.MutableRefObject
     let lx = 0;
     let ly = 0;
     const down = (e: PointerEvent) => {
+      // Left-button drags only — right/middle clicks and UI overlay clicks pass through.
+      // Ignore drags that start on venue labels / HUD (they are pointer-transparent now,
+      // but drei Html nodes can still be hit).
+      const t = e.target as HTMLElement | null;
+      if (e.button !== 0) return;
+      if (t && t.closest && t.closest(".venue-label")) return;
       dragging = true;
       lx = e.clientX;
       ly = e.clientY;
@@ -49,7 +55,10 @@ export default function EntryCamera({ posRef }: { posRef: React.MutableRefObject
     };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
-      orbit.current.dist = Math.max(4, Math.min(11, orbit.current.dist + e.deltaY * 0.008));
+      // Trackpads fire wheel with large deltas (and ctrlKey for pinch) — normalize so zoom doesn't jump.
+      const unit = e.deltaMode === 1 ? 16 : 1;
+      const step = e.ctrlKey ? 0.02 : 0.004;
+      orbit.current.dist = Math.max(4, Math.min(11, orbit.current.dist + e.deltaY * unit * step));
     };
     el.addEventListener("pointerdown", down);
     window.addEventListener("pointermove", move);

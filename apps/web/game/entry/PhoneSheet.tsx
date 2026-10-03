@@ -59,8 +59,10 @@ export default function PhoneSheet({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === "Enter") send();
             }}
+            onKeyUp={(e) => e.stopPropagation()}
             placeholder="Say something out loud…"
             maxLength={280}
             className="flex-1 rounded-full bg-slate-100 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300"

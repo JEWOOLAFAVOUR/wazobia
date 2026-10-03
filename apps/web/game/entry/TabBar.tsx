@@ -1,10 +1,10 @@
 "use client";
 
-export type EntryTab = "home" | "buy" | "map" | "phone";
+export type EntryTab = "home" | "live" | "map" | "phone";
 
 const TABS: { id: EntryTab; label: string; icon: string }[] = [
   { id: "home", label: "Home", icon: "⌂" },
-  { id: "buy", label: "Buy", icon: "🛒" },
+  { id: "live", label: "Live", icon: "🚶" },
   { id: "map", label: "Map", icon: "🗺" },
   { id: "phone", label: "Phone", icon: "📱" },
 ];

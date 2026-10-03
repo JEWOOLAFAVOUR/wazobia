@@ -18,6 +18,13 @@ type Props = {
   onInteractKey?: () => void;
 };
 
+function isTypingTarget(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+}
+
 /** Local-only controller. Multiplayer later replaces posRef writes with server state. */
 export default function EntryPlayer({ avatar, initial, posRef, colliders, onMove, onInteractKey }: Props) {
   const group = useRef<THREE.Group>(null);
@@ -34,6 +41,8 @@ export default function EntryPlayer({ avatar, initial, posRef, colliders, onMove
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      // Never steal keys while the user is typing in chat / sheets.
+      if (isTypingTarget()) return;
       const k = e.key.toLowerCase();
       keys.current[k] = true;
       if (["w", "a", "s", "d", " ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) {

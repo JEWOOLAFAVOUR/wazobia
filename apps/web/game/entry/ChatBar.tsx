@@ -16,8 +16,10 @@ export default function ChatBar({ onSend }: { onSend: (text: string) => void }) 
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
+          e.stopPropagation();
           if (e.key === "Enter") send();
         }}
+        onKeyUp={(e) => e.stopPropagation()}
         placeholder="Say something out loud…"
         maxLength={280}
         className="flex-1 min-w-0 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none"
